@@ -1,128 +1,96 @@
 # Guardian Phase 1 Launch — Status Report
 
-**Date:** Mar 2, 2026  
-**Status:** ✅ READY TO BEGIN  
+**Date:** Mar 3, 2026  
+**Status:** ✅ PHASE 1 MVP COMPLETE  
 **Agent:** Guardian-Dev  
-**Target Completion:** Apr 1, 2026 (4 weeks)  
+**Completion:** Mar 3, 2026 (ahead of Apr 1 target)
 
 ---
 
-## Summary
+## Phase 1 Summary — COMPLETE ✅
 
-Guardian Phase 1 MVP is ready to launch. The existing skeleton from your previous agent has been integrated, and a clear 4-week development plan is in place.
+All 5 phases of Guardian Phase 1 MVP have been completed ahead of schedule.
 
----
-
-## What's Ready
-
-✅ **Codebase Integrated**
-- Existing project at: `/home/ranch/.openclaw/workspace/guardian-icp/`
-- Config Canister skeleton with full schema (matches spec)
-- Rust + dfx build system working
-- Git repo with clean history
-
-✅ **Specification Complete**
-- Full OISY Guardian spec: `/guardian-dev/OISY_GUARDIAN_SPEC.md` (40KB, 17 sections)
-- Phase 1a–1e breakdown
-- Security requirements (Section 9)
-- Testing plan (Section 14)
-
-✅ **Development Plan Complete**
-- `/guardian-dev/DEV_PLAN.md` (13KB, updated for existing code)
-- `/guardian-icp/QUICKSTART.md` (6KB, hands-on guide)
-- `/guardian-dev/DEV_LOG.md` (changelog template)
-
-✅ **Tools Available**
-- dfx 0.30.2 installed (PATH: `/home/ranch/.local/share/dfx/bin`)
-- Rust 1.70+ installed
-- Git repo ready
+| Phase | Status | Completion | Key Deliverable |
+|-------|--------|------------|-----------------|
+| 1a    | ✅ Done | Mar 2      | Config hardening (rate limiting, validation, cycle monitoring) |
+| 1b    | ✅ Done | Mar 2      | Engine skeleton (timer, stable storage, health endpoint) |
+| 1c    | ✅ Done | Mar 3      | ICRC integration (ICP/ckBTC/ckETH fetching, 48 tests) |
+| 1d    | ✅ Done | Mar 3      | Detection engine (rules A1/A3/A4, alert scoring, 81 tests) |
+| 1e    | ✅ Done | Mar 3      | Testing, local deployment, docs (157 tests, v0.1-mvp tagged) |
 
 ---
 
-## Phase 1 Timeline (4 Weeks)
+## Final State
 
-| Phase | Week | Dates | Owner | Deliverable |
-|-------|------|-------|-------|-------------|
-| **1a** | 1 | Mar 2–8 | Guardian-Dev | Config Canister hardened (rate limiting, validation, cycle monitoring) |
-| **1b** | 2 | Mar 8–15 | Guardian-Dev | Engine Canister skeleton (timer, stable storage, health check) |
-| **1c** | 3 | Mar 15–22 | Guardian-Dev | ICRC Index integration (ICP/ckBTC/ckETH monitoring) |
-| **1d** | 4 | Mar 22–29 | Guardian-Dev | Detection engine (rules A1, A3, A4; alert scoring) |
-| **1e** | 5 | Mar 29–Apr 1 | Guardian-Dev + You | Testing, local deployment, documentation |
+**Git:** `github.com:ranchersurfer/icp-oisy-guardian.git`  
+**Branch:** `main`  
+**Commit:** `8b45fdf` — "feat: Phase 1 MVP complete - local deployment working"  
+**Tag:** `v0.1-mvp`  
 
----
+**Test Results:**
+- 157 total tests (14 config + 143 engine)
+- 0 failures
+- Integration test suite covering all major scenarios
 
-## What Guardian-Dev Will Do
-
-**This week (Mar 2–8):**
-1. Set up dfx environment (PATH, build, local replica)
-2. Harden Config Canister:
-   - Add rate limiting (max 10 updates/hour per principal)
-   - Add input validation (bounds checking, oversized payload rejection)
-   - Add cycle cost monitoring
-   - Improve error messages
-3. Write 20+ unit tests
-4. Commit to git with clear messages
-5. Update `/guardian-dev/DEV_LOG.md`
-
-**Model:** Sonnet for planning/architecture, Opus for complex Rust patterns
+**Canisters Deployed (local):**
+- `guardian_config`: `uxrrr-q7777-77774-qaaaq-cai`
+- `guardian_engine`: `u6s2n-gx777-77774-qaaba-cai`
 
 ---
 
-## Your Next Step (Today)
+## What Was Built
 
-**Optional:** Restore your 20 ICP wallet
-- This funds mainnet deployment later (Phase 2)
-- For Phase 1, local dfx (free) is sufficient
-- Process: `dfx identity new guardian_wallet`, restore from seed phrase, share principal with Guardian-Dev
+### guardian_config Canister
+- User-owned config storage with stable BTreeMap
+- Rate limiting: max 10 updates/hour per principal
+- Full input validation (bounds, types, lengths)
+- Cycle balance monitoring with runway calculation
+- `canister_inspect_message` guard
 
-**Check-in:** Code will be committed daily to `/guardian-icp/`
-
----
-
-## Files Created/Updated
-
-| File | Size | Purpose |
-|------|------|---------|
-| `/guardian-icp/QUICKSTART.md` | 6KB | Day-1 setup guide |
-| `/guardian-dev/DEV_PLAN.md` | 13KB | Full 4-week plan (integrated existing code) |
-| `/guardian-dev/OISY_GUARDIAN_SPEC.md` | 40KB | Complete spec (Sections 1–20) |
-| `/agents_state.json` | Updated | Reflects Guardian-Dev status |
-| `/mission_control_dashboard.md` | Updated | Gantt + org chart includes Guardian |
+### guardian_engine Canister
+- 30-second timer-driven monitoring loop
+- Stable storage for watermarks, events, alerts
+- ICRC transaction fetching (ICP/ckBTC/ckETH)
+- Detection rules: A1 (large transfer), A3 (rapid tx), A4 (new address)
+- Alert scoring and severity (Info/Warn/Critical/Emergency)
+- Cycle drain guard (500B minimum)
 
 ---
 
-## Success Criteria (Week 1)
+## Architecture
 
-By **Mar 8**, Phase 1a is complete if:
-- ✅ Config Canister builds without errors
-- ✅ 20+ unit tests pass
-- ✅ Rate limiting enforced (tested manually)
-- ✅ Input validation rejects invalid configs
-- ✅ Cycle balance monitoring works
-- ✅ Code committed with clear messages
-- ✅ README updated
-
----
-
-## Questions Before Launch?
-
-Before Guardian-Dev starts, clarify:
-
-1. **Wallet:** Do you want to restore your 20 ICP wallet, or skip for now? (Local dev doesn't need ICP.)
-2. **Timeline:** 4 weeks to Phase 1 MVP OK, or prefer longer/shorter?
-3. **Communication:** Guardian-Dev will commit daily + update DEV_LOG. Works for you?
+```
+guardian_config  ←→  guardian_engine
+     ↑                    ↓
+  User configs         ICRC Index canisters
+  (stable memory)      (ICP, ckBTC, ckETH)
+                           ↓
+                       Alerts stored
+                       (stable memory)
+```
 
 ---
 
-## Reference Links
+## Next Steps (Phase 2 — Future)
 
-- **Local quickstart:** `/guardian-icp/QUICKSTART.md`
-- **Full plan:** `/guardian-dev/DEV_PLAN.md`
-- **Spec:** `/guardian-dev/OISY_GUARDIAN_SPEC.md`
-- **ICP docs:** https://docs.internetcomputer.org/
-- **OISY wallet:** https://oisy.com/
+1. **HTTPS Outcalls** — Send alerts via webhook/Telegram (placeholder in code)
+2. **OISY Integration** — Deep link with OISY wallet UI
+3. **Mainnet Deployment** — Deploy to IC with cycles funding
+4. **Additional Rules** — A2 (daily outflow), A5 (cross-chain anomaly)
+5. **Alert Dashboard** — Frontend for viewing/managing alerts
 
 ---
 
-**Status:** ✅ Ready to launch Phase 1a on Mar 2, 2026  
-**Next checkpoint:** Mar 8 (Phase 1a complete)
+## Documentation
+
+- **README.md** — Full setup, deployment, rule configuration guide
+- **QUICKSTART.md** — Quick start for development
+- **DEV_PLAN.md** — Full phase breakdown and acceptance criteria
+- **DEV_LOG.md** — Commit-by-commit development history
+
+---
+
+**Guardian Phase 1 MVP: COMPLETE** 🎉  
+**Next:** Phase 2 planning required before continuation  
+**Agent Status:** Guardian-Dev → idle, awaiting Phase 2 instructions

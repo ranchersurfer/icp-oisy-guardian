@@ -1,63 +1,45 @@
-# Guardian File Structure
+# Guardian ICP — File Structure
 
-**Last Updated:** 2026-03-03 (auto-updated by Guardian-Dev after each phase)
+**Last Updated:** 2026-03-03 (Phase 1e complete)
 
----
-
-## Current Codebase Structure
+## Source Tree
 
 ```
-guardian-icp/                        # Cargo workspace root
-├── Cargo.toml                       # Workspace manifest
-├── dfx.json                         # ICP canister config (guardian_config + guardian_engine)
-├── .gitignore                       # Blocks memory/, .dfx/, target/, SSH keys
-├── QUICKSTART.md
-├── README.md
-│
-├── src/
-│   ├── lib.rs                       # (legacy stub)
-│   ├── guardian.did                 # Config canister Candid interface
-│   ├── guardian_engine.did          # Engine canister Candid interface
-│   │
-│   ├── guardian_config/             # ✅ Phase 1a — Config Canister
-│   │   ├── Cargo.toml
-│   │   └── src/
-│   │       └── lib.rs               # GuardianConfig, rate limiting, validation, 14 tests
-│   │
-│   └── guardian_engine/             # ✅ Phase 1b/1c/1d — Engine Canister
-│       ├── Cargo.toml
-│       └── src/
-│           ├── lib.rs               # Timer, stable storage, health endpoint, detection wiring, 81 tests
-│           ├── icrc.rs              # ✅ Phase 1c — ICRC types
-│           ├── fetcher.rs           # ✅ Phase 1c — Transaction fetchers (ICP/ckBTC/ckETH)
-│           ├── canisters.rs         # Canister ID constants (ICP/ckBTC/ckETH)
-│           ├── detector.rs          # ✅ Phase 1d — Rule engine (A1/A3/A4), severity scoring
-│           └── alerts.rs            # ✅ Phase 1d — Alert payload formatting, stable AlertRecord storage
-│
-└── target/                          # Build artifacts (gitignored)
-
-guardian-dev/                        # Planning & docs (not in guardian-icp repo)
-├── DEV_PLAN.md                      # Full Phase 1a–1e breakdown
-├── DEV_LOG.md                       # Running changelog
-└── OISY_GUARDIAN_SPEC.md            # Full spec (40KB)
+guardian-icp/src/
+├── guardian.did                          # Config canister Candid interface
+├── guardian_config/
+│   ├── Cargo.toml                        # guardian_config crate manifest
+│   └── src/
+│       └── lib.rs                        # Config canister (rate limiting, validation, cycle monitoring)
+├── guardian_engine/
+│   ├── Cargo.toml                        # guardian_engine crate manifest
+│   └── src/
+│       ├── lib.rs                        # Engine canister (timer, watermarks, alerts, stable storage)
+│       ├── alerts.rs                     # Alert payload formatting and storage
+│       ├── canisters.rs                  # ICRC canister IDs and fetch constants
+│       ├── detector.rs                   # Rule evaluation engine (A1/A3/A4)
+│       ├── fetcher.rs                    # ICRC transaction fetching + ring buffer
+│       ├── icrc.rs                       # ICRC type definitions
+│       └── integration_tests.rs         # Phase 1e integration tests (62 tests)
+├── guardian_engine.did                   # Engine canister Candid interface
+└── lib.rs                               # Workspace stub
 ```
-
----
 
 ## Phase Status
 
-| Phase | Scope | Status | Tests |
-|-------|-------|--------|-------|
-| 1a | Config hardening (rate limit, validation) | ✅ Done | 14/14 |
-| 1b | Engine skeleton (timer, stable storage) | ✅ Done | 17/17 |
-| 1c | ICRC integration (ICP/ckBTC/ckETH fetch) | ✅ Done | — |
-| 1d | Detection engine (rules A1/A3/A4) | ✅ Done | 81/81 |
-| 1e | Integration tests + local deploy | ⏳ Pending | — |
+| Phase | Status | Tests | Commit |
+|-------|--------|-------|--------|
+| 1a: Config hardening | ✅ Complete | 14 tests | Mar 2 |
+| 1b: Engine skeleton | ✅ Complete | 17 tests | Mar 2, `6f714bc` |
+| 1c: ICRC integration | ✅ Complete | 48 tests | Mar 3, `bf7511f` |
+| 1d: Detection engine | ✅ Complete | 81 tests | Mar 3 |
+| 1e: Testing + local deploy | ✅ Complete | 157 tests | Mar 3, `8b45fdf` (v0.1-mvp) |
 
----
+## Test Summary
 
-## GitHub
-
-- **Repo:** https://github.com/ranchersurfer/icp-oisy-guardian
-- **Branch:** `main`
-- **Latest commit:** Phase 1d — Detection engine with rules A1/A3/A4 and severity scoring
+| Crate | Tests | Status |
+|-------|-------|--------|
+| guardian_config | 14 | ✅ All passing |
+| guardian_engine (unit) | 81 | ✅ All passing |
+| guardian_engine (integration) | 62 | ✅ All passing |
+| **TOTAL** | **157** | **✅ 0 failures** |

@@ -187,3 +187,60 @@ Mar 3: "feat: Phase 1c - ICRC Index integration for ICP/ckBTC/ckETH transaction 
 **Build status:** ✅ WASM release build successful (5 warnings, 0 errors)
 **Test count:** 81/81 passing
 **New files:** detector.rs, alerts.rs
+
+---
+
+## March 3, 2026 – Phase 1e: Testing & Local Deployment
+
+**Status:** ✅ COMPLETE  
+**Commit:** `8b45fdf` — "feat: Phase 1 MVP complete - local deployment working"  
+**Tag:** `v0.1-mvp`  
+**Test Results:** 157 total (14 guardian_config + 143 guardian_engine), 0 failures
+
+### What Was Done
+
+**LOCAL DFX SETUP:**
+- ✅ Started local replica: `dfx start --clean --background`
+- ✅ Built both canisters: `cargo build --target wasm32-unknown-unknown --release`
+- ✅ Fixed dfx.json: changed type from "rust" to "custom" to resolve cdylib conflict
+- ✅ Deployed `guardian_config` (uxrrr-q7777-77774-qaaaq-cai)
+- ✅ Deployed `guardian_engine` (u6s2n-gx777-77774-qaaba-cai)
+- ✅ Both canisters responding to health checks
+
+**INTEGRATION TESTS (62 new tests → 143 total guardian_engine):**
+- ✅ Full monitoring cycle (no-alert, large-tx alert, rapid-tx alert, new-addr alert)
+- ✅ Config + Engine interaction (threshold gating, allowlist suppression)
+- ✅ Upgrade safety: Watermark, AlertRecord, WatermarkKey roundtrips
+- ✅ Rate limit enforcement simulation
+- ✅ ICRC tx conversion (outgoing, incoming, zero, max, chain labels)
+- ✅ Ring buffer merge (append, trim-to-max, empty cases, max-1)
+- ✅ Watermark advance/no-regress logic
+- ✅ Alert payload (unique IDs, severity labels, events summary, user field)
+- ✅ Security: incoming-only no alert, empty events, zero balance, 50%/51% boundary
+- ✅ Cycle guard constant validation (500B)
+- ✅ Multi-user isolation (independent detection per user)
+- ✅ WatermarkKey uniqueness per chain/user
+- ✅ Severity mapping (Info/Warn/Critical/Emergency at correct thresholds)
+- ✅ Canister ID validation (ICP/ckBTC/ckETH)
+
+**SECURITY REVIEW:**
+- ✅ No hardcoded secrets
+- ✅ All inputs validated in set_config (owner, percentages, thresholds, chains, limits)
+- ✅ Error messages don't leak internal state
+- ✅ canister_inspect_message hook in place
+- ✅ Cycle drain guard enforced (500B minimum)
+- ✅ Anonymous caller rejection on all update endpoints
+
+**DOCUMENTATION:**
+- ✅ README.md fully updated (setup, deployment, rule guide, Candid reference)
+- ✅ dfx.json updated with Candid metadata to suppress deprecation warnings
+- ✅ Rule configuration guide (A1/A3/A4 with weights and thresholds)
+
+**FINAL STATE:**
+- 157 tests total (0 failures)
+- Both canisters deployed and operational on local replica
+- Committed and pushed: `8b45fdf`
+- Tagged: `v0.1-mvp`
+- Phase 1 MVP complete
+
+**Last Updated:** 2026-03-03 PST
