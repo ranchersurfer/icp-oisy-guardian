@@ -2,18 +2,18 @@
   "version": 1,
   "canisters": {
     "guardian_config": {
-      "type": "rust",
+      "type": "custom",
       "candid": "src/guardian.did",
-      "package": "guardian_config",
       "build": "cargo build --target wasm32-unknown-unknown --release --package guardian_config",
-      "wasm": "target/wasm32-unknown-unknown/release/guardian_config.wasm"
+      "wasm": "target/wasm32-unknown-unknown/release/guardian_config.wasm",
+      "metadata": [{ "name": "candid:service" }]
     },
     "guardian_engine": {
-      "type": "rust",
+      "type": "custom",
       "candid": "src/guardian_engine.did",
-      "package": "guardian_engine",
       "build": "cargo build --target wasm32-unknown-unknown --release --package guardian_engine",
-      "wasm": "target/wasm32-unknown-unknown/release/guardian_engine.wasm"
+      "wasm": "target/wasm32-unknown-unknown/release/guardian_engine.wasm",
+      "metadata": [{ "name": "candid:service" }]
     }
   },
   "defaults": {

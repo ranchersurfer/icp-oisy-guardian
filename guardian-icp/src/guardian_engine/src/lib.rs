@@ -3,6 +3,8 @@ pub mod canisters;
 pub mod detector;
 pub mod fetcher;
 pub mod icrc;
+#[cfg(test)]
+mod integration_tests;
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk::{api, caller, init, query, update};
@@ -22,6 +24,8 @@ use icrc::IcrcAccount;
 // Security constants
 // ---------------------------------------------------------------------------
 const MIN_CYCLE_BALANCE: u64 = 500_000_000_000; // 500B cycles – cycle drain guard
+#[cfg(test)]
+pub const MIN_CYCLE_BALANCE_PUB: u64 = MIN_CYCLE_BALANCE;
 
 // ---------------------------------------------------------------------------
 // Enums
