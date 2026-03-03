@@ -36,3 +36,22 @@ Steps:
 5. Write a brief morning summary (3-5 lines max) and append to memory/morning-brief.md
 
 Output: Confirmed completion with count of updates made.
+[2026-03-03 01:00:01] Dream cycle starting...
+Date: 2026-03-03
+Log file: /home/ranch/.openclaw/workspace/memory/2026-03-03.md
+
+[INFO] No ANTHROPIC_API_KEY in environment. To run:
+  1. From Moises's main session: Copy this task and send it as a message
+  2. Or set up via: openclaw cron add --name dream-cycle --schedule '0 1 * * *' --message '...'
+
+Task to send:
+Consolidate daily memory (date: 2026-03-03). 
+
+Steps:
+1. If memory/2026-03-03.md exists, read it thoroughly
+2. Extract high-signal insights: facts learned, decisions made, patterns observed, lessons from mistakes
+3. Update relevant Tier 2 topic files in memory/ (projects.md, preferences.md, security.md, etc.) with new information
+4. If any Tier 1 file (SOUL.md, USER.md, MEMORY.md) has grown >3KB, review and trim redundant content
+5. Write a brief morning summary (3-5 lines max) and append to memory/morning-brief.md
+
+Output: Confirmed completion with count of updates made.

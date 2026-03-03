@@ -16,6 +16,15 @@ export interface MemoryDay {
   date: string
   filename: string
   cardCount: number
+  wordCount: number
+  sizeKb: number
+}
+
+export interface MemoryFull {
+  date: string
+  content: string
+  wordCount: number
+  sizeKb: number
 }
 
 function extractTags(text: string): string[] {
@@ -47,8 +56,12 @@ export async function readMemoryDays(): Promise<MemoryDay[]> {
     .sort()
     .reverse()
   return files.map(f => {
-    const cards = parseMemoryFile(path.join(dir, f))
-    return { date: f.replace('.md', ''), filename: f, cardCount: cards.length }
+    const filePath = path.join(dir, f)
+    const cards = parseMemoryFile(filePath)
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : ''
+    const sizeKb = Math.round((fs.existsSync(filePath) ? fs.statSync(filePath).size : 0) / 1024 * 10) / 10
+    const wordCount = content.split(/\s+/).filter(Boolean).length
+    return { date: f.replace('.md', ''), filename: f, cardCount: cards.length, wordCount, sizeKb }
   })
 }
 
@@ -102,4 +115,17 @@ export async function readLongTermMemory(): Promise<string> {
   const p = workspacePath('MEMORY.md')
   if (!fs.existsSync(p)) return '*No long-term memory file found.*'
   return fs.readFileSync(p, 'utf8')
+}
+
+export async function readFullMemory(date: string): Promise<MemoryFull | null> {
+  const dir = workspacePath('memory')
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+  const file = files.find(f => f.startsWith(date))
+  if (!file) return null
+  const filePath = path.join(dir, file)
+  const content = fs.readFileSync(filePath, 'utf8')
+  const stat = fs.statSync(filePath)
+  const sizeKb = Math.round(stat.size / 1024 * 10) / 10
+  const wordCount = content.split(/\s+/).filter(Boolean).length
+  return { date, content, wordCount, sizeKb }
 }

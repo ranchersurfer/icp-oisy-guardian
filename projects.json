@@ -4,13 +4,15 @@
     "name": "OISY Guardian MVP",
     "description": "Wallet safety and transaction guardian for ICP. Phase 1 covers local devnet: Config Canister, rule validation engine, mock OISY integration, audit logging.",
     "status": "in_progress",
-    "progress": 20,
+    "progress": 80,
     "owner_agent_id": "guardian-dev",
     "created_at": "2026-03-02T00:00:00Z",
-    "updated_at": "2026-03-02T00:00:00Z",
+    "updated_at": "2026-03-03T06:14:00Z",
     "roadmap_id": "R9",
     "related_tasks": [],
-    "related_docs": ["guardian-icp/DEV_PLAN.md"],
+    "related_docs": [
+      "guardian-icp/DEV_PLAN.md"
+    ],
     "related_memories": []
   },
   {
@@ -24,13 +26,15 @@
     "updated_at": "2026-03-01T00:00:00Z",
     "roadmap_id": "R7",
     "related_tasks": [],
-    "related_docs": ["prospector/PROSPECTOR_RULES.md"],
+    "related_docs": [
+      "prospector/PROSPECTOR_RULES.md"
+    ],
     "related_memories": []
   },
   {
     "id": "proj-creator",
     "name": "Creator Content Engine",
-    "description": "Automated social media content pipeline for horror/AI/OpenClaw niches. 10–12 posts/week across TikTok, IG, LinkedIn, YouTube, Twitter.",
+    "description": "Automated social media content pipeline for horror/AI/OpenClaw niches. 10\u201312 posts/week across TikTok, IG, LinkedIn, YouTube, Twitter.",
     "status": "not_started",
     "progress": 0,
     "owner_agent_id": "creator",
@@ -38,7 +42,9 @@
     "updated_at": "2026-03-01T00:00:00Z",
     "roadmap_id": "R8",
     "related_tasks": [],
-    "related_docs": ["creator/CONTENT_STRATEGY.md"],
+    "related_docs": [
+      "creator/CONTENT_STRATEGY.md"
+    ],
     "related_memories": []
   },
   {
@@ -52,7 +58,10 @@
     "updated_at": "2026-03-02T21:32:00Z",
     "roadmap_id": null,
     "related_tasks": [],
-    "related_docs": ["mission-control/SPEC.md", "mission-control/BUILD_PLAN.md"],
+    "related_docs": [
+      "mission-control/SPEC.md",
+      "mission-control/BUILD_PLAN.md"
+    ],
     "related_memories": []
   },
   {
@@ -66,7 +75,9 @@
     "updated_at": "2026-02-28T00:00:00Z",
     "roadmap_id": "R3",
     "related_tasks": [],
-    "related_docs": ["memory/projects.md"],
+    "related_docs": [
+      "memory/projects.md"
+    ],
     "related_memories": []
   }
 ]

@@ -1,4 +1,6 @@
+pub mod alerts;
 pub mod canisters;
+pub mod detector;
 pub mod fetcher;
 pub mod icrc;
 
@@ -10,7 +12,9 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 
+use alerts::format_alert;
 use canisters::MAX_EVENTS_PER_USER;
+use detector::{evaluate, DetectionContext};
 use fetcher::{merge_into_ring_buffer, update_watermark_after_fetch};
 use icrc::IcrcAccount;
 
@@ -366,7 +370,55 @@ async fn run_fetch_cycle(now_ns: u64) {
             }
             Err(e) => ic_cdk::println!("ckETH fetch error for {:?}: {}", principal, e),
         }
+
+        // --- Detection engine ---
+        // Load all stored events for this user and run rule evaluation.
+        let user_events = load_user_events(&principal);
+        if !user_events.is_empty() {
+            // Estimate balance: sum of incoming minus sum of outgoing (floor 0)
+            let total_in: u64 = user_events.iter()
+                .filter(|e| e.direction == Direction::In)
+                .map(|e| e.amount_e8s)
+                .fold(0u64, |a, x| a.saturating_add(x));
+            let total_out: u64 = user_events.iter()
+                .filter(|e| e.direction == Direction::Out)
+                .map(|e| e.amount_e8s)
+                .fold(0u64, |a, x| a.saturating_add(x));
+            let estimated_balance = total_in.saturating_sub(total_out);
+
+            // Default config values (Phase 2: fetch from config canister)
+            let alert_threshold: u8 = 7;
+            let allowlisted: Vec<String> = vec![];
+
+            let ctx = DetectionContext {
+                events: &user_events,
+                estimated_balance_e8s: estimated_balance,
+                allowlisted_addresses: &allowlisted,
+                alert_threshold,
+            };
+
+            let result = evaluate(&ctx);
+
+            if result.should_alert {
+                let severity_str = result.severity.as_str().to_string();
+                let payload = format_alert(principal, result, user_events, now_ns);
+                ic_cdk::println!("ALERT: {} for {:?} (alert_id={})", severity_str, principal, payload.alert_id);
+                // TODO Phase 2: HTTPS outcall to notify external channel
+                // ic_cdk::println!("Placeholder: would send outcall for alert {}", payload.alert_id);
+            }
+        }
     }
+}
+
+/// Load all events stored for a user from stable memory.
+fn load_user_events(principal: &Principal) -> Vec<UnifiedEvent> {
+    let key = user_events_key(principal);
+    USER_EVENTS.with(|ue| {
+        ue.borrow()
+            .get(&key)
+            .and_then(|b| candid::decode_one::<Vec<UnifiedEvent>>(&b).ok())
+            .unwrap_or_default()
+    })
 }
 
 /// Merge `new_events` into the per-user ring buffer in stable memory.
@@ -670,5 +722,390 @@ mod tests {
         let bytes = lt.to_bytes();
         let lt2 = LastTick::from_bytes(bytes);
         assert_eq!(lt2.value, 123_456_789);
+    }
+
+    // =========================================================================
+    // Phase 1d: Detection Engine Tests
+    // =========================================================================
+    mod detector_tests {
+        use super::*;
+        use crate::detector::{
+            evaluate, rule_a1_large_transfer, rule_a3_rapid_transactions, rule_a4_new_address,
+            DetectionContext, Severity,
+        };
+
+        fn make_out_event(amount: u64, counterparty: Principal, ts: u64) -> UnifiedEvent {
+            UnifiedEvent {
+                chain: "ICP".to_string(),
+                timestamp: ts,
+                direction: Direction::Out,
+                amount_e8s: amount,
+                counterparty,
+                tx_id: format!("tx-{}", ts),
+            }
+        }
+
+        fn make_in_event(amount: u64, ts: u64) -> UnifiedEvent {
+            UnifiedEvent {
+                chain: "ICP".to_string(),
+                timestamp: ts,
+                direction: Direction::In,
+                amount_e8s: amount,
+                counterparty: Principal::anonymous(),
+                tx_id: format!("in-{}", ts),
+            }
+        }
+
+        // --- A1: Large transfer ---
+
+        #[test]
+        fn test_a1_large_transfer_detected() {
+            let events = vec![make_out_event(60, Principal::anonymous(), 1000)];
+            let result = rule_a1_large_transfer(&events, 100);
+            assert!(result.is_some());
+            assert_eq!(result.unwrap().rule_id, "A1");
+        }
+
+        #[test]
+        fn test_a1_small_transfer_ignored() {
+            let events = vec![make_out_event(40, Principal::anonymous(), 1000)];
+            let result = rule_a1_large_transfer(&events, 100);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a1_exactly_50_percent_not_triggered() {
+            // 50/100 = 50%, threshold is > 50% so exactly 50 should NOT trigger
+            let events = vec![make_out_event(50, Principal::anonymous(), 1000)];
+            let result = rule_a1_large_transfer(&events, 100);
+            assert!(result.is_none(), "Exactly 50% should not trigger A1");
+        }
+
+        #[test]
+        fn test_a1_51_percent_triggered() {
+            // 51/100 = 51% — should trigger
+            let events = vec![make_out_event(51, Principal::anonymous(), 1000)];
+            let result = rule_a1_large_transfer(&events, 100);
+            assert!(result.is_some(), "51% should trigger A1");
+        }
+
+        #[test]
+        fn test_a1_zero_balance_no_trigger() {
+            let events = vec![make_out_event(100, Principal::anonymous(), 1000)];
+            let result = rule_a1_large_transfer(&events, 0);
+            assert!(result.is_none(), "Zero balance should not trigger A1");
+        }
+
+        #[test]
+        fn test_a1_incoming_tx_not_triggered() {
+            let events = vec![make_in_event(999, 1000)];
+            let result = rule_a1_large_transfer(&events, 100);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a1_weight_is_7() {
+            let events = vec![make_out_event(51, Principal::anonymous(), 1000)];
+            let m = rule_a1_large_transfer(&events, 100).unwrap();
+            assert_eq!(m.weight, 7);
+        }
+
+        // --- A3: Rapid transactions ---
+
+        fn make_n_out_events(n: usize, start_ts: u64, interval_ns: u64) -> Vec<UnifiedEvent> {
+            (0..n)
+                .map(|i| make_out_event(1, Principal::anonymous(), start_ts + i as u64 * interval_ns))
+                .collect()
+        }
+
+        #[test]
+        fn test_a3_five_txs_not_triggered() {
+            // Exactly 5 outgoing txs in 10 min — should NOT trigger (threshold is >5)
+            let events = make_n_out_events(5, 0, 60_000_000_000); // 1 min apart
+            let result = rule_a3_rapid_transactions(&events);
+            assert!(result.is_none(), "5 txs should not trigger A3");
+        }
+
+        #[test]
+        fn test_a3_six_txs_triggered() {
+            // 6 txs within 10 min — should trigger
+            let events = make_n_out_events(6, 0, 60_000_000_000); // 1 min apart, total 5 min
+            let result = rule_a3_rapid_transactions(&events);
+            assert!(result.is_some(), "6 txs in 10 min should trigger A3");
+        }
+
+        #[test]
+        fn test_a3_six_txs_outside_10min_not_triggered() {
+            // 6 txs but spaced so no 6 fit within 10 min window
+            // 6 txs at 2 min intervals = span 10 min (0, 2, 4, 6, 8, 10 minutes)
+            // Window is [0, 10min] inclusive — 11 min span means last falls outside
+            let min = 60_000_000_000u64;
+            let events = make_n_out_events(6, 0, 2 * min + 1); // slightly over 2 min apart → 10min+5s span
+            let result = rule_a3_rapid_transactions(&events);
+            assert!(result.is_none(), "6 txs spanning >10 min should not trigger A3");
+        }
+
+        #[test]
+        fn test_a3_weight_is_3() {
+            let events = make_n_out_events(6, 0, 60_000_000_000);
+            let m = rule_a3_rapid_transactions(&events).unwrap();
+            assert_eq!(m.weight, 3);
+        }
+
+        #[test]
+        fn test_a3_empty_events_not_triggered() {
+            let result = rule_a3_rapid_transactions(&[]);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a3_incoming_txs_not_counted() {
+            // 10 incoming txs — should not trigger (only outgoing counted)
+            let events: Vec<UnifiedEvent> = (0..10)
+                .map(|i| make_in_event(1, i * 60_000_000_000))
+                .collect();
+            let result = rule_a3_rapid_transactions(&events);
+            assert!(result.is_none());
+        }
+
+        // --- A4: New destination address ---
+
+        #[test]
+        fn test_a4_known_address_not_triggered() {
+            let p = Principal::from_slice(&[42u8; 29]);
+            let events = vec![make_out_event(100, p, 1000)];
+            let allowlist = vec![p.to_text()];
+            let result = rule_a4_new_address(&events, &allowlist);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a4_unknown_address_triggered() {
+            let p = Principal::from_slice(&[42u8; 29]);
+            let events = vec![make_out_event(100, p, 1000)];
+            let allowlist: Vec<String> = vec![];
+            let result = rule_a4_new_address(&events, &allowlist);
+            assert!(result.is_some(), "Unknown address should trigger A4");
+        }
+
+        #[test]
+        fn test_a4_weight_is_1() {
+            let p = Principal::from_slice(&[1u8; 29]);
+            let events = vec![make_out_event(100, p, 1000)];
+            let m = rule_a4_new_address(&events, &[]).unwrap();
+            assert_eq!(m.weight, 1);
+        }
+
+        #[test]
+        fn test_a4_incoming_ignored() {
+            let events = vec![make_in_event(100, 1000)];
+            let result = rule_a4_new_address(&events, &[]);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a4_empty_events_not_triggered() {
+            let result = rule_a4_new_address(&[], &[]);
+            assert!(result.is_none());
+        }
+
+        // --- Scoring ---
+
+        fn make_ctx<'a>(
+            events: &'a [UnifiedEvent],
+            balance: u64,
+            allowlist: &'a [String],
+            threshold: u8,
+        ) -> DetectionContext<'a> {
+            DetectionContext {
+                events,
+                estimated_balance_e8s: balance,
+                allowlisted_addresses: allowlist,
+                alert_threshold: threshold,
+            }
+        }
+
+        #[test]
+        fn test_score_a1_only_equals_7() {
+            // A1 only: large transfer, no rapid txs (only 1 tx), known address
+            let p = Principal::from_slice(&[7u8; 29]);
+            let events = vec![make_out_event(51, p, 1000)];
+            let allowlist = vec![p.to_text()];
+            let ctx = make_ctx(&events, 100, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 7);
+            assert_eq!(result.rules_triggered.len(), 1);
+            assert_eq!(result.rules_triggered[0].rule_id, "A1");
+        }
+
+        #[test]
+        fn test_score_a3_only_equals_3() {
+            // 6 outgoing in 10 min, all going to same known address, small amounts
+            let p = Principal::from_slice(&[8u8; 29]);
+            let allowlist = vec![p.to_text()];
+            let events = make_n_out_events(6, 0, 60_000_000_000)
+                .into_iter()
+                .map(|mut e| { e.counterparty = p; e })
+                .collect::<Vec<_>>();
+            // Balance large enough that no single tx > 50%
+            let ctx = make_ctx(&events, 1_000_000, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 3);
+        }
+
+        #[test]
+        fn test_score_a1_plus_a3_equals_10() {
+            let p = Principal::from_slice(&[9u8; 29]);
+            let allowlist = vec![p.to_text()];
+            // 6 txs in 10 min, one is large (>50% of balance)
+            let mut events = make_n_out_events(6, 0, 60_000_000_000)
+                .into_iter()
+                .map(|mut e| { e.counterparty = p; e.amount_e8s = 1; e })
+                .collect::<Vec<_>>();
+            // Override first to be large
+            events[0].amount_e8s = 51;
+            let ctx = make_ctx(&events, 100, &allowlist, 7);
+            let result = evaluate(&ctx);
+            // A1(7) + A3(3) = 10
+            assert_eq!(result.score, 10);
+        }
+
+        // --- Threshold / should_alert ---
+
+        #[test]
+        fn test_threshold_score_equals_threshold_alerts() {
+            // score 7, threshold 7 → should_alert = true
+            let p = Principal::from_slice(&[10u8; 29]);
+            let events = vec![make_out_event(51, p, 1000)];
+            let allowlist = vec![p.to_text()];
+            let ctx = make_ctx(&events, 100, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 7);
+            assert!(result.should_alert);
+        }
+
+        #[test]
+        fn test_threshold_score_below_threshold_no_alert() {
+            // score 3, threshold 7 → should_alert = false
+            let p = Principal::from_slice(&[11u8; 29]);
+            let allowlist = vec![p.to_text()];
+            let events = make_n_out_events(6, 0, 60_000_000_000)
+                .into_iter()
+                .map(|mut e| { e.counterparty = p; e })
+                .collect::<Vec<_>>();
+            let ctx = make_ctx(&events, 1_000_000, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 3);
+            assert!(!result.should_alert);
+        }
+
+        #[test]
+        fn test_no_rules_triggered() {
+            // No events → no rules triggered, score 0
+            let ctx = make_ctx(&[], 1000, &[], 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 0);
+            assert!(result.rules_triggered.is_empty());
+            assert!(!result.should_alert);
+        }
+
+        // --- Severity enum ---
+
+        #[test]
+        fn test_severity_from_score_info() {
+            assert_eq!(Severity::from_score(0), Severity::Info);
+            assert_eq!(Severity::from_score(2), Severity::Info);
+        }
+
+        #[test]
+        fn test_severity_from_score_warn() {
+            assert_eq!(Severity::from_score(3), Severity::Warn);
+            assert_eq!(Severity::from_score(6), Severity::Warn);
+        }
+
+        #[test]
+        fn test_severity_from_score_critical() {
+            assert_eq!(Severity::from_score(7), Severity::Critical);
+            assert_eq!(Severity::from_score(14), Severity::Critical);
+        }
+
+        #[test]
+        fn test_severity_from_score_emergency() {
+            assert_eq!(Severity::from_score(15), Severity::Emergency);
+            assert_eq!(Severity::from_score(255), Severity::Emergency);
+        }
+
+        // --- Alert payload ---
+
+        #[test]
+        fn test_alert_payload_fields_populated() {
+            use crate::alerts::format_alert;
+            let p = Principal::from_slice(&[20u8; 29]);
+            let dest = Principal::from_slice(&[21u8; 29]);
+            // Put dest in allowlist so A4 doesn't fire, only A1 (score=7)
+            let allowlist = vec![dest.to_text()];
+            let events = vec![make_out_event(51, dest, 1000)];
+            let ctx = make_ctx(&events, 100, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 7, "Expected only A1 to fire");
+            let payload = format_alert(p, result, events, 1_700_000_000_000_000_000u64);
+            assert!(!payload.alert_id.is_empty());
+            assert_eq!(payload.user, p);
+            assert_eq!(payload.severity, "CRITICAL");
+            assert_eq!(payload.severity_score, 7);
+            assert!(!payload.rules_triggered.is_empty());
+            assert!(!payload.events_summary.is_empty());
+            assert!(!payload.recommended_action.is_empty());
+        }
+
+        #[test]
+        fn test_alert_payload_no_events_summary() {
+            use crate::alerts::format_alert;
+            let p = Principal::from_slice(&[21u8; 29]);
+            // Manually build a result with should_alert true but no events
+            let result = crate::detector::DetectionResult {
+                score: 7,
+                severity: Severity::Critical,
+                rules_triggered: vec![crate::detector::RuleMatch {
+                    rule_id: "A1".to_string(),
+                    description: "test".to_string(),
+                    weight: 7,
+                }],
+                should_alert: true,
+            };
+            let payload = format_alert(p, result, vec![], 1000);
+            assert_eq!(payload.events_summary, "No events");
+        }
+
+        // --- Edge cases ---
+
+        #[test]
+        fn test_a1_empty_events() {
+            let result = rule_a1_large_transfer(&[], 1000);
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn test_a3_four_txs_not_triggered() {
+            let events = make_n_out_events(4, 0, 60_000_000_000);
+            assert!(rule_a3_rapid_transactions(&events).is_none());
+        }
+
+        #[test]
+        fn test_evaluate_all_three_rules() {
+            // A1 + A3 + A4 all triggered → score 11
+            let unknown = Principal::from_slice(&[99u8; 29]);
+            let mut events = make_n_out_events(6, 0, 60_000_000_000)
+                .into_iter()
+                .map(|mut e| { e.counterparty = unknown; e.amount_e8s = 1; e })
+                .collect::<Vec<_>>();
+            events[0].amount_e8s = 51; // trigger A1
+            let allowlist: Vec<String> = vec![];
+            let ctx = make_ctx(&events, 100, &allowlist, 7);
+            let result = evaluate(&ctx);
+            assert_eq!(result.score, 11); // A1(7)+A3(3)+A4(1)
+            assert!(result.should_alert);
+            assert_eq!(result.severity, Severity::Critical);
+        }
     }
 }

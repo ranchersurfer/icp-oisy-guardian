@@ -1,35 +1,95 @@
 [
   {
     "id": "task-1",
-    "title": "Guardian Phase 1a",
-    "description": "Set up Guardian agent with Phase 1a capabilities including memory integration and tool access.",
-    "status": "in_progress",
+    "title": "Guardian Phase 1a — Config hardening",
+    "description": "Rate limiting, input validation, cycle monitoring, 14 unit tests. All passing.",
+    "status": "done",
     "assignee": "guardian-dev",
     "priority": "high",
-    "project_id": "guardian",
-    "created_at": "2026-02-28T10:00:00Z",
-    "updated_at": "2026-03-01T14:30:00Z"
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-02T00:00:00Z",
+    "updated_at": "2026-03-02T16:42:00Z",
+    "completed_at": "2026-03-02T16:42:00Z"
   },
   {
     "id": "task-2",
+    "title": "Guardian Phase 1b — Engine skeleton",
+    "description": "Guardian engine canister with timer loop, stable storage, health endpoint. 17 unit tests passing.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-02T20:00:00Z",
+    "updated_at": "2026-03-02T21:30:00Z",
+    "completed_at": "2026-03-02T21:30:00Z"
+  },
+  {
+    "id": "task-3",
+    "title": "Guardian Phase 1c — ICRC Index integration",
+    "description": "Transaction fetching for ICP, ckBTC, ckETH via ICRC index canisters. Watermark tracking.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-02T21:36:00Z",
+    "updated_at": "2026-03-03T07:00:00Z",
+    "completed_at": "2026-03-03T07:00:00Z"
+  },
+  {
+    "id": "task-4",
+    "title": "Guardian Phase 1d — Detection engine",
+    "description": "Rule evaluation (A1/A3/A4), severity scoring, alert payload formatting.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-02T00:00:00Z",
+    "updated_at": "2026-03-03T07:00:00Z",
+    "completed_at": "2026-03-03T07:00:00Z"
+  },
+  {
+    "id": "task-5",
+    "title": "Guardian Phase 1e — Integration tests + local deploy",
+    "description": "50+ integration tests, local dfx deployment, security review, documentation.",
+    "status": "backlog",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-02T00:00:00Z",
+    "updated_at": "2026-03-02T00:00:00Z"
+  },
+  {
+    "id": "task-6",
     "title": "Set up Prospector cron",
-    "description": "Configure cron job for Prospector agent to run daily research tasks and update workspace files.",
+    "description": "Configure cron job for Prospector agent to scan Upwork/LinkedIn every 6 hours.",
     "status": "backlog",
     "assignee": "mission-control",
     "priority": "med",
-    "project_id": "prospector",
+    "project_id": "proj-prospector",
     "created_at": "2026-03-01T09:00:00Z",
     "updated_at": "2026-03-01T09:00:00Z"
   },
   {
-    "id": "task-3",
+    "id": "task-7",
     "title": "Creator content calendar Week 2",
     "description": "Plan and schedule content creation tasks for Week 2, including blog posts, social media, and newsletters.",
     "status": "backlog",
     "assignee": "creator",
     "priority": "low",
-    "project_id": "creator",
+    "project_id": "proj-creator",
     "created_at": "2026-03-02T08:00:00Z",
     "updated_at": "2026-03-02T08:00:00Z"
+  },
+  {
+    "id": "task-8",
+    "title": "Mission Control Dashboard — All phases",
+    "description": "Next.js dashboard with Task Board, Calendar, Projects, Memories, Docs, Team screens.",
+    "status": "done",
+    "assignee": "mission-control",
+    "priority": "high",
+    "project_id": "proj-dashboard",
+    "created_at": "2026-03-02T20:55:00Z",
+    "updated_at": "2026-03-02T21:30:00Z",
+    "completed_at": "2026-03-02T21:30:00Z"
   }
 ]
