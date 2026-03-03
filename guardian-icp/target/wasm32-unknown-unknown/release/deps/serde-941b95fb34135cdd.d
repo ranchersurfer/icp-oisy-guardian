@@ -1,0 +1,14 @@
+/home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/deps/serde-941b95fb34135cdd.d: /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/build/serde-840ebb2c6da38c2f/out/private.rs
+
+/home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/deps/libserde-941b95fb34135cdd.rlib: /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/build/serde-840ebb2c6da38c2f/out/private.rs
+
+/home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/deps/libserde-941b95fb34135cdd.rmeta: /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/build/serde-840ebb2c6da38c2f/out/private.rs
+
+/home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/ranch/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/build/serde-840ebb2c6da38c2f/out/private.rs:
+
+# env-dep:OUT_DIR=/home/ranch/.openclaw/workspace/guardian-icp/target/wasm32-unknown-unknown/release/build/serde-840ebb2c6da38c2f/out

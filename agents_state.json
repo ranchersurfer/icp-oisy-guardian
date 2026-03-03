@@ -1,0 +1,439 @@
+{
+  "generated_at": "2026-02-28T22:33:00Z",
+  "metadata": {
+    "operator": "Moises",
+    "timezone": "America/Los_Angeles",
+    "workspace_root": "/home/ranch/.openclaw/workspace",
+    "config_path": "/home/ranch/.openclaw/openclaw.json"
+  },
+  "agents": [
+    {
+      "id": "main",
+      "name": "Mission Control / Orchestrator",
+      "role": "Primary operator agent; handles business logic, decisions, custom skill development",
+      "workspace": "/home/ranch/.openclaw/workspace",
+      "model": {
+        "primary": "anthropic/claude-haiku-4-5-20251001",
+        "fallbacks": [
+          "anthropic/claude-sonnet-4-6",
+          "anthropic/claude-opus-4-6"
+        ]
+      },
+      "execution_mode": "manual",
+      "tools": {
+        "allowed": [
+          "read",
+          "write",
+          "edit",
+          "exec",
+          "browser",
+          "web_search",
+          "web_fetch",
+          "message",
+          "sessions_send",
+          "memory_search",
+          "memory_get"
+        ],
+        "elevated": true,
+        "comment": "Full access to workspace and external tools; executes within main session context"
+      },
+      "current_task": "Build custom skills for OpenClaw automation agency; validate token cost savings",
+      "task_status": "in_progress",
+      "cron_jobs": [],
+      "metrics": {
+        "monthly_cost_estimate": "$18-27",
+        "cost_reduction_vs_baseline": "70-80%",
+        "model_efficiency": "Haiku-first (10-50x cheaper than Sonnet)"
+      }
+    },
+    {
+      "id": "dream-cycle",
+      "name": "Dream Cycle",
+      "role": "Nightly memory consolidation; reads daily logs, extracts insights, updates Tier 2 memory files, writes morning brief",
+      "workspace": "/home/ranch/.openclaw/workspace",
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "comment": "Intentionally upgraded to Sonnet for complex reasoning on memory consolidation"
+      },
+      "execution_mode": "automated",
+      "tools": {
+        "allowed": [
+          "read",
+          "write",
+          "edit",
+          "memory_search",
+          "memory_get"
+        ],
+        "comment": "Limited to memory operations; isolated session (no external tools)"
+      },
+      "current_task": "Automated nightly consolidation of session logs → memory files → morning brief",
+      "task_status": "automated",
+      "cron_jobs": [
+        {
+          "job_id": "0775fb15-54ad-440d-a0d0-9114fb7d9a6f",
+          "name": "dream-cycle",
+          "schedule": "0 1 * * *",
+          "schedule_description": "Daily at 1:00 AM PST",
+          "enabled": true,
+          "script": "/home/ranch/.openclaw/workspace/scripts/dream-cycle.sh",
+          "created_at": "2026-02-28T21:54:00Z",
+          "next_run": "2026-03-01T01:00:00-08:00"
+        }
+      ],
+      "metrics": {
+        "last_execution": null,
+        "execution_frequency": "1x daily (1 AM)",
+        "expected_token_usage_per_run": "~500-1000 (Sonnet)"
+      }
+    },
+    {
+      "id": "prospector",
+      "name": "Prospector",
+      "role": "Lead generation & outreach; find qualified clients for AI automation services, draft personalized proposals, monitor job boards",
+      "workspace": "/home/ranch/.openclaw/workspace/prospector",
+      "model": {
+        "primary": "anthropic/claude-haiku-4-5-20251001",
+        "fallbacks": [
+          "anthropic/claude-sonnet-4-6"
+        ],
+        "comment": "Haiku for scanning/filtering, Sonnet for proposal drafting"
+      },
+      "execution_mode": "automated",
+      "tools": {
+        "allowed": [
+          "browser",
+          "read",
+          "write",
+          "edit"
+        ],
+        "denied": [
+          "exec",
+          "shell"
+        ],
+        "comment": "Read-only browsing; drafts only, human approves before sending"
+      },
+      "current_task": "Scan job boards for AI automation opportunities every 6 hours",
+      "task_status": "staging",
+      "cron_jobs": [
+        {
+          "schedule": "0 */6 * * *",
+          "description": "Scan Upwork, LinkedIn for AI automation opportunities",
+          "enabled": false,
+          "comment": "Will enable 2026-03-01"
+        }
+      ],
+      "metrics": {
+        "opportunities_target_weekly": 20,
+        "proposal_approval_rate_target": "70%",
+        "close_rate_target": "30-50%",
+        "revenue_target_monthly": "$5K-$15K"
+      }
+    },
+    {
+      "id": "creator",
+      "name": "Creator",
+      "role": "Social media content engine; research trends, generate content calendars, draft posts, create image prompts for horror/tech/AI niches",
+      "workspace": "/home/ranch/.openclaw/workspace/creator",
+      "model": {
+        "primary": "anthropic/claude-haiku-4-5-20251001",
+        "fallbacks": [
+          "anthropic/claude-sonnet-4-6"
+        ],
+        "comment": "Haiku for research/scheduling, Sonnet for creative writing"
+      },
+      "execution_mode": "automated",
+      "tools": {
+        "allowed": [
+          "browser",
+          "read",
+          "write",
+          "edit"
+        ],
+        "denied": [
+          "exec",
+          "shell"
+        ],
+        "comment": "Read-only research; drafts only, human approves before publishing"
+      },
+      "current_task": "Daily content research, calendar planning, draft creation at 8 AM",
+      "task_status": "staging",
+      "cron_jobs": [
+        {
+          "schedule": "0 8 * * *",
+          "description": "Daily content research, trend analysis, draft posts",
+          "enabled": false,
+          "comment": "Will enable 2026-03-01"
+        }
+      ],
+      "metrics": {
+        "posts_per_week": "10-12",
+        "content_pillars": [
+          "Horror entertainment",
+          "AI/automation tutorials",
+          "OpenClaw + dev tips"
+        ],
+        "follower_growth_target": "+1000/month",
+        "engagement_target": ">5%"
+      }
+    },
+    {
+      "id": "guardian-dev",
+      "name": "Guardian-Dev",
+      "role": "OISY Guardian product development; build wallet safety/transaction guardian for ICP using Rust",
+      "workspace": "/home/ranch/.openclaw/workspace/guardian-icp",
+      "codebase_source": "Existing skeleton from previous agent, integrated Mar 2",
+      "github_repo": "https://github.com/ranchersurfer/icp-oisy-guardian",
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "fallbacks": [
+          "anthropic/claude-opus-4-6"
+        ],
+        "comment": "Sonnet for planning/architecture, Opus for complex Rust canister code"
+      },
+      "execution_mode": "task-driven",
+      "tools": {
+        "allowed": [
+          "read",
+          "write",
+          "edit",
+          "exec",
+          "shell",
+          "browser"
+        ],
+        "denied": [
+          "message"
+        ],
+        "comment": "Full dev access in guardian-icp workspace; no wallet/key access; dfx available"
+      },
+      "current_task": "Phase 1a: Config Canister hardening (rate limiting, validation, cycle monitoring)",
+      "task_status": "active",
+      "start_date": "2026-03-02",
+      "phase_deadline": "2026-04-01",
+      "cron_jobs": [],
+      "metrics": {
+        "phase": "1 (MVP) — 4 weeks",
+        "1a_deadline": "2026-03-08",
+        "1b_deadline": "2026-03-15",
+        "1c_deadline": "2026-03-22",
+        "1d_deadline": "2026-03-29",
+        "1e_deadline": "2026-04-01",
+        "test_coverage_target": "85%+",
+        "dfx_status": "Ready (0.30.2 installed)",
+        "rust_status": "Ready (1.70+)"
+      }
+    }
+  ],
+  "roadmap": [
+    {
+      "id": "R1",
+      "title": "Cost Optimization (Haiku-first routing)",
+      "status": "done",
+      "owner_agent": "main",
+      "started_at": "2026-02-24",
+      "completed_at": "2026-02-27",
+      "description": "Reduce OpenClaw monthly cost from ~$90 (Sonnet default) to ~$18-27 via intelligent model routing",
+      "notes_file": "memory/cost-optimization.md",
+      "deliverables": [
+        "Model routing config (Haiku primary, Sonnet/Opus fallbacks)",
+        "Token efficiency rules in SOUL.md",
+        "Cost baseline validation strategy"
+      ]
+    },
+    {
+      "id": "R2",
+      "title": "Security Foundation (skill-guard + injection-patterns)",
+      "status": "done",
+      "owner_agent": "main",
+      "started_at": "2026-02-24",
+      "completed_at": "2026-02-27",
+      "description": "Build credential hygiene, threat database, and skill vetting framework",
+      "notes_file": "memory/security.md",
+      "deliverables": [
+        "skill-guard framework (8-step audit procedure)",
+        "injection-patterns.md (OpenClaw-specific threat database)",
+        "API key rotation protocol",
+        "Credentials consolidated to single config source"
+      ]
+    },
+    {
+      "id": "R3",
+      "title": "Memory Architecture 2.0 (Tier 1 ↔ Tier 2 refactor)",
+      "status": "done",
+      "owner_agent": "main",
+      "started_at": "2026-02-27",
+      "completed_at": "2026-02-28",
+      "description": "Restructure memory from bloated Tier 1 to lean index + searchable Tier 2",
+      "notes_file": "memory/projects.md",
+      "deliverables": [
+        "Tier 1 trimmed (12KB → 6KB)",
+        "5 Tier 2 topic files created (projects, preferences, cost-optimization, security, infrastructure)",
+        "Hybrid search enabled (BM25 + vector, 70/30)",
+        "Embedding cache, MMR, temporal decay configured"
+      ]
+    },
+    {
+      "id": "R4",
+      "title": "Dream Cycle Automation (Nightly memory consolidation)",
+      "status": "done",
+      "owner_agent": "main",
+      "started_at": "2026-02-27",
+      "completed_at": "2026-02-28",
+      "description": "Deploy automated nightly memory consolidation to prevent data loss on long sessions",
+      "notes_file": "DREAM-CYCLE.md",
+      "deliverables": [
+        "dream-cycle.sh script created",
+        "OpenClaw cron job deployed (0 1 * * *)",
+        "Runs with Sonnet 4.6 for complex reasoning",
+        "Auto-consolidates logs → memory → morning brief"
+      ]
+    },
+    {
+      "id": "R5",
+      "title": "Custom Skills Development (Content generation, price monitoring)",
+      "status": "planned",
+      "owner_agent": "main",
+      "estimated_start": "2026-03-01",
+      "estimated_completion": "2026-03-31",
+      "description": "Build 2-3 high-ROI custom skills aligned to business goals (content gen, price monitoring, etc.)",
+      "notes_file": "memory/projects.md",
+      "deliverables": [
+        "Content generation skill (for video/horror content pipeline)",
+        "Price monitoring skill (for e-commerce arbitrage)",
+        "Documentation and deployment guides",
+        "ROI validation (80%+ manual work reduction)"
+      ],
+      "dependencies": [
+        "R1 (cost optimization baseline)",
+        "R3 (memory architecture)",
+        "R4 (automation framework)"
+      ]
+    },
+    {
+      "id": "R6",
+      "title": "Crypto/ICP Guardian Stack (Strategic platform play)",
+      "status": "planned",
+      "owner_agent": "main",
+      "estimated_start": "2026-04-01",
+      "estimated_completion": "2026-06-30",
+      "description": "Build ICP dapp prototype + crypto-powered business infrastructure using Caffeine.AI",
+      "notes_file": "memory/projects.md",
+      "deliverables": [
+        "ICP dapp skeleton (Caffeine.AI)",
+        "OpenClaw <-> ICP integration research",
+        "Bitcoin/ICP business application prototype",
+        "Long-term strategic play validation"
+      ],
+      "dependencies": [
+        "R5 (custom skills maturity)"
+      ]
+    },
+    {
+      "id": "R7",
+      "title": "Prospector Agent (Lead Generation)",
+      "status": "staging",
+      "owner_agent": "prospector",
+      "estimated_start": "2026-03-01",
+      "estimated_completion": "2026-03-15",
+      "description": "Deploy automated lead generation for AI automation agency; scan job boards every 6 hours, draft personalized proposals",
+      "notes_file": "prospector/PROSPECTOR_RULES.md",
+      "deliverables": [
+        "Automated Upwork/LinkedIn scanning (every 6 hours)",
+        "Prospect pipeline tracking (PROSPECT_PIPELINE.md)",
+        "Tier 1 / Quick Win / Full Stack proposal templates",
+        "First proposals sent to qualified leads"
+      ],
+      "dependencies": [
+        "R1 (cost baseline)",
+        "R3 (memory architecture)"
+      ],
+      "metrics": {
+        "monthly_revenue_target": "$5K-$15K (first month)",
+        "close_rate_target": "30-50%",
+        "opportunities_per_week": "20-30"
+      }
+    },
+    {
+      "id": "R8",
+      "title": "Creator Agent (Content Pipeline)",
+      "status": "staging",
+      "owner_agent": "creator",
+      "estimated_start": "2026-03-01",
+      "estimated_completion": "2026-03-31",
+      "description": "Deploy automated content creation for horror/AI/OpenClaw niches; daily research, draft, calendar planning",
+      "notes_file": "creator/CONTENT_STRATEGY.md",
+      "deliverables": [
+        "Content strategy (3 pillars: horror, automation, dev tips)",
+        "Daily content calendar + drafting",
+        "10-12 posts/week across TikTok, IG, LinkedIn, YouTube, Twitter",
+        "Audience growth targets (5K TikTok followers by Mar 31)"
+      ],
+      "dependencies": [
+        "R1 (cost baseline)"
+      ],
+      "metrics": {
+        "posts_per_week": "10-12",
+        "engagement_rate_target": ">5%",
+        "follower_growth": "+1000/month",
+        "inquiry_conversion": "50-100 DMs → 2-3 Prospector leads/month"
+      }
+    },
+    {
+      "id": "R9",
+      "title": "Guardian-Dev (Phase 1 MVP)",
+      "status": "planning",
+      "owner_agent": "guardian-dev",
+      "estimated_start": "2026-03-01",
+      "estimated_completion": "2026-04-15",
+      "description": "Develop OISY Guardian MVP; wallet safety + transaction guardian for ICP (Phase 1: local devnet only)",
+      "notes_file": "guardian-dev/DEV_PLAN.md",
+      "deliverables": [
+        "Guardian Config Canister (Rust/Motoko)",
+        "Rule validation engine (spending limits, whitelist, time-based)",
+        "Mock OISY integration",
+        "Frontend dashboard (read-only)",
+        "Audit logging + security hardening",
+        "Documentation + demo video"
+      ],
+      "dependencies": [
+        "R1 (cost baseline)",
+        "R3 (memory architecture)"
+      ],
+      "metrics": {
+        "test_coverage": "85%+",
+        "security_posture": "Ready for Phase 2 review",
+        "deployment_readiness": "Devnet only (mainnet deferred)"
+      }
+    }
+  ],
+  "runtime_metrics": {
+    "capture_timestamp": "2026-02-28T22:33:00Z",
+    "monthly_cost": {
+      "estimated": "$18-27",
+      "baseline_before_optimization": "$90",
+      "savings_percent": "70-80%",
+      "cost_driver": "Haiku-first routing with embedding cache + efficient context usage"
+    },
+    "memory_system": {
+      "tier_1_size_kb": 6,
+      "tier_1_size_before_refactor_kb": 12,
+      "tier_2_files_count": 5,
+      "total_memory_files_kb": 25,
+      "search_backend": "qmd (hybrid BM25 + vector)",
+      "embedding_cache_enabled": true,
+      "temporal_decay_enabled": true,
+      "mmr_enabled": true
+    },
+    "security": {
+      "threat_database_size_kb": 11.7,
+      "skill_vetting_steps": 8,
+      "credential_rotation_frequency": "7-day PAT expiry",
+      "last_api_key_rotation": "2026-02-26"
+    },
+    "automation": {
+      "active_cron_jobs": 1,
+      "dream_cycle_daily_runs": 1,
+      "dream_cycle_model": "Sonnet 4.6",
+      "expected_dream_cycle_tokens_daily": "500-1000"
+    }
+  }
+}
