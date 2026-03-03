@@ -1,0 +1,24 @@
+# ICP build artifacts
+target/
+.dfx/
+
+# OpenClaw memory files — NEVER commit these (may contain secrets/API keys)
+memory/
+../memory/
+
+# OpenClaw workspace config/logs — keep local only
+../memory/
+../MEMORY.md
+../openclaw.json
+*.env
+.env*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
