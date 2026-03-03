@@ -42,7 +42,7 @@ export default function KanbanBoard() {
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: fetchTasks,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const mutation = useMutation({

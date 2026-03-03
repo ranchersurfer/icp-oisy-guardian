@@ -45,8 +45,36 @@ export interface AgentsState {
   agents: Agent[]
 }
 
+export interface AgentStatusEntry {
+  status: 'idle' | 'working' | 'error'
+  current_task: string | null
+  last_updated: string | null
+}
+
+export function readAgentStatusFile(): Record<string, AgentStatusEntry> {
+  const p = workspacePath('agent-status.json')
+  if (!fs.existsSync(p)) {
+    const defaults: Record<string, AgentStatusEntry> = {
+      'guardian-dev': { status: 'working', current_task: 'Phase 1c: ICRC Index Integration', last_updated: new Date().toISOString() },
+      'dream-cycle': { status: 'idle', current_task: null, last_updated: null },
+      'prospector': { status: 'idle', current_task: null, last_updated: null },
+      'creator': { status: 'idle', current_task: null, last_updated: null },
+      'mission-control': { status: 'working', current_task: 'Orchestrating agents', last_updated: new Date().toISOString() },
+    }
+    fs.writeFileSync(p, JSON.stringify(defaults, null, 2), 'utf8')
+    return defaults
+  }
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
 export async function readAgentsState(): Promise<AgentsState> {
   const p = workspacePath('agents_state.json')
+  const agentStatus = readAgentStatusFile()
+
   if (!fs.existsSync(p)) {
     return {
       generated_at: new Date().toISOString(),
@@ -58,22 +86,32 @@ export async function readAgentsState(): Promise<AgentsState> {
           role: 'Primary orchestrator',
           model: { primary: 'claude-sonnet-4-6' },
           tools: { allowed: ['read', 'write', 'exec', 'browser', 'web_search'] },
-          status: 'idle',
+          status: agentStatus['mission-control']?.status ?? 'idle',
+          current_task: agentStatus['mission-control']?.current_task ?? undefined,
         }
       ]
     }
   }
+
   const raw = fs.readFileSync(p, 'utf8')
   const data: AgentsState = JSON.parse(raw)
-  // normalize status
-  data.agents = data.agents.map(a => ({
-    ...a,
-    status: (a.task_status === 'in_progress' || a.task_status === 'automated')
+
+  // normalize status + merge agent-status.json overrides
+  data.agents = data.agents.map(a => {
+    const override = agentStatus[a.id]
+    const baseStatus: 'idle' | 'working' | 'error' = (a.task_status === 'in_progress' || a.task_status === 'automated')
       ? 'working'
       : a.task_status === 'error'
       ? 'error'
-      : 'idle',
-  }))
+      : 'idle'
+
+    return {
+      ...a,
+      status: override?.status ?? baseStatus,
+      current_task: override?.current_task ?? a.current_task,
+    }
+  })
+
   return data
 }
 
@@ -90,26 +128,39 @@ export async function readMetrics() {
     lastUpdated = mtimes[0] || ''
   }
 
-  // count active cron jobs from agents_state
+  // count entries in schedule.json
   let cronCount = 0
-  try {
-    const state = await readAgentsState()
-    state.agents.forEach(a => {
-      cronCount += (a.cron_jobs || []).filter(c => c.enabled).length
-    })
-  } catch {}
+  const schedulePath = workspacePath('schedule.json')
+  if (fs.existsSync(schedulePath)) {
+    try {
+      const scheduleData = JSON.parse(fs.readFileSync(schedulePath, 'utf8'))
+      cronCount = Array.isArray(scheduleData) ? scheduleData.length : 0
+    } catch {}
+  }
 
-  // security score
+  // security score — parse from memory/security.md
   let securityScore = '8/10'
   const secPath = workspacePath('memory', 'security.md')
   if (fs.existsSync(secPath)) {
     const content = fs.readFileSync(secPath, 'utf8')
-    const m = content.match(/score[:\s]+(\d+\/\d+|\d+)/i)
+    const m = content.match(/(\d+\/10)/i)
     if (m) securityScore = m[1]
   }
 
+  // cost estimate — parse from memory/cost-optimization.md
+  let monthlyCost = '$18-27/mo'
+  const costPath = workspacePath('memory', 'cost-optimization.md')
+  if (fs.existsSync(costPath)) {
+    const content = fs.readFileSync(costPath, 'utf8')
+    const m = content.match(/\$(\d+)[-–](\d+)\/mo|\$(\d+)\/mo/)
+    if (m) {
+      if (m[1] && m[2]) monthlyCost = `$${m[1]}-${m[2]}/mo`
+      else if (m[3]) monthlyCost = `$${m[3]}/mo`
+    }
+  }
+
   return {
-    monthlyCost: '$20/mo (est.)',
+    monthlyCost,
     tier2FileCount: tier2Count,
     memoryLastUpdated: lastUpdated,
     activeCronJobs: cronCount,

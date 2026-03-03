@@ -61,17 +61,20 @@ export default function MemoriesView() {
   const { data: days = [] } = useQuery({
     queryKey: ['memory-days'],
     queryFn: fetchDays,
+    refetchInterval: 15000,
   })
 
   const { data: cards = [] } = useQuery({
     queryKey: ['memory-cards', selectedDate],
     queryFn: () => fetchCards(selectedDate!),
+    refetchInterval: 15000,
     enabled: !!selectedDate,
   })
 
   const { data: ltData } = useQuery({
     queryKey: ['memory-longterm'],
     queryFn: fetchLongTerm,
+    refetchInterval: 15000,
     enabled: activeTab === 'longterm',
   })
 

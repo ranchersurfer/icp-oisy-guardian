@@ -257,7 +257,7 @@ export default function CalendarView() {
   const { data: items = [], isLoading } = useQuery<ScheduledItem[]>({
     queryKey: ['schedule'],
     queryFn: () => fetch('/api/schedule').then(r => r.json()),
-    refetchInterval: 30_000,
+    refetchInterval: 15000,
   })
 
   const year = currentDate.getFullYear()

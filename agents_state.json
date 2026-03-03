@@ -205,8 +205,8 @@
         ],
         "comment": "Full dev access in guardian-icp workspace; no wallet/key access; dfx available"
       },
-      "current_task": "Phase 1a: Config Canister hardening (rate limiting, validation, cycle monitoring)",
-      "task_status": "active",
+      "current_task": "Phase 1c: ICRC Index Integration",
+      "task_status": "working",
       "start_date": "2026-03-02",
       "phase_deadline": "2026-04-01",
       "cron_jobs": [],

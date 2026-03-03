@@ -37,6 +37,37 @@
 
 ---
 
+## Phase 1b Implementation Log
+
+### March 2, 2026 – Guardian Engine Canister Skeleton
+
+**Completed:**
+- ✅ Converted project to Cargo workspace (`src/guardian_config/`, `src/guardian_engine/`)
+- ✅ Created `guardian_engine` crate with all required data structures
+- ✅ Data structures: `UnifiedEvent`, `AlertRecord`, `Watermark`, `Chain` enum, `Direction` enum, `AlertStatus` enum
+- ✅ Stable storage: `StableBTreeMap<WatermarkKey, Watermark>` and `StableBTreeMap<String, AlertRecord>`
+- ✅ `WatermarkKey` struct: 30-byte stable key (29 principal bytes + 1 chain discriminant)
+- ✅ Timer: `set_timer_interval(30s, timer_tick)` started in `#[init]`
+- ✅ Timer tick: logs timestamp, checks cycle balance, updates `last_tick` in stable memory
+- ✅ Health endpoint: `#[query] get_health() -> EngineHealthStatus` (cycle_balance, last_tick, is_running, watermark_count)
+- ✅ Inter-canister interface: `#[update] set_config_canister_id(id)`, stub `fetch_user_configs()`
+- ✅ Security: `reject_anonymous()` on all update calls, `guard_cycles()` rejects if balance < 500B
+- ✅ Updated `dfx.json` with `guardian_engine` canister entry
+- ✅ Created `src/guardian_engine.did` Candid interface
+- ✅ **17 unit tests** covering: Watermark serialization, AlertRecord creation/transitions, Chain discriminants, WatermarkKey encoding/ordering, UnifiedEvent fields, EngineHealthStatus structure, timer flag, LastTick roundtrip
+- ✅ All 31 tests pass (14 guardian_config + 17 guardian_engine)
+- ✅ WASM build successful: `cargo build --target wasm32-unknown-unknown --release`
+- ✅ Committed and pushed: `6f714bc`
+
+**Commit:** `6f714bc` — "feat: Phase 1b - Guardian Engine Canister skeleton with timer, stable storage, health endpoint"
+
+**Notes:**
+- Warnings only (elided lifetime suggestions from rustc) — no errors
+- `guardian_config` rate-limiting helpers (`get_recent_timestamps`, `record_update`) not yet wired to `set_config`; left as-is (Phase 1a concern)
+- Phase 1c: wire `fetch_user_configs()` to actual inter-canister call
+
+---
+
 ## Phase 1a Implementation Log
 
 ### Feature 1: Rate Limiting (Max 10 config updates/hour per principal)
@@ -75,5 +106,5 @@ Mar 2: "fix: Storable implementation + build fixes for guardian_config"
 
 ---
 
-**Last Updated:** 2026-03-02 16:37 PST
-**Next Review:** 2026-03-08 (Phase 1a completion check)
+**Last Updated:** 2026-03-02 21:31 PST
+**Next Review:** 2026-03-08 (Phase 1a/1b completion check)

@@ -56,7 +56,7 @@ export default function ProjectsGrid() {
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => fetch('/api/projects').then(r => r.json()),
-    refetchInterval: 30_000,
+    refetchInterval: 15000,
   })
 
   if (isLoading) {

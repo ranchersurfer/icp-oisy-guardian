@@ -1,3 +1,7 @@
+pub mod canisters;
+pub mod fetcher;
+pub mod icrc;
+
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk::{api, caller, init, query, update};
 use ic_stable_structures::storable::Bound;
@@ -5,6 +9,10 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
+
+use canisters::MAX_EVENTS_PER_USER;
+use fetcher::{merge_into_ring_buffer, update_watermark_after_fetch};
+use icrc::IcrcAccount;
 
 // ---------------------------------------------------------------------------
 // Security constants
@@ -204,6 +212,11 @@ thread_local! {
     static META: RefCell<StableBTreeMap<String, Vec<u8>, DefaultMemoryImpl>> =
         RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
 
+    /// Per-user event ring buffer: WatermarkKey (principal, ICP chain) → candid-encoded Vec<UnifiedEvent>
+    /// We reuse WatermarkKey as a 30-byte principal key (chain byte = 0xFF for event store).
+    static USER_EVENTS: RefCell<StableBTreeMap<WatermarkKey, Vec<u8>, DefaultMemoryImpl>> =
+        RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
+
     /// Runtime flag: has the timer been started?
     static IS_RUNNING: RefCell<bool> = RefCell::new(false);
 }
@@ -284,6 +297,104 @@ fn timer_tick() {
 
     // Update health status
     set_last_tick(ts);
+
+    // Phase 1c: spawn async fetch for all users (not in test builds — no ic_cdk runtime)
+    #[cfg(not(test))]
+    ic_cdk::spawn(async move {
+        run_fetch_cycle(ts).await;
+    });
+}
+
+/// Async fetch cycle: for each known watermark entry, fetch transactions from
+/// all 3 chains, store new events in the ring buffer, and update watermarks.
+#[cfg(not(test))]
+async fn run_fetch_cycle(now_ns: u64) {
+    // Collect all unique principals from the watermark map.
+    let principals: Vec<Principal> = WATERMARKS.with(|w| {
+        w.borrow()
+            .iter()
+            .map(|(key, _)| {
+                // First 29 bytes of key encode the principal slice.
+                let slice = &key.0[..29];
+                // Strip trailing zero padding to reconstruct.
+                let end = slice.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0);
+                Principal::from_slice(&slice[..end])
+            })
+            .collect::<std::collections::HashSet<Principal>>()
+            .into_iter()
+            .collect()
+    });
+
+    for principal in principals {
+        let account = IcrcAccount::new(principal);
+
+        // Fetch ICP
+        let icp_wm_key = WatermarkKey::new(&principal, &Chain::ICP);
+        let icp_wm = WATERMARKS.with(|w| w.borrow().get(&icp_wm_key).unwrap_or_default());
+        match fetcher::fetch_icp_transactions(account.clone(), &icp_wm).await {
+            Ok(events) => {
+                let mut updated_wm = icp_wm.clone();
+                update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
+                WATERMARKS.with(|w| w.borrow_mut().insert(icp_wm_key, updated_wm));
+                store_user_events(&principal, events);
+            }
+            Err(e) => ic_cdk::println!("ICP fetch error for {:?}: {}", principal, e),
+        }
+
+        // Fetch ckBTC
+        let ckbtc_wm_key = WatermarkKey::new(&principal, &Chain::CkBTC);
+        let ckbtc_wm = WATERMARKS.with(|w| w.borrow().get(&ckbtc_wm_key).unwrap_or_default());
+        match fetcher::fetch_ckbtc_transactions(account.clone(), &ckbtc_wm).await {
+            Ok(events) => {
+                let mut updated_wm = ckbtc_wm.clone();
+                update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
+                WATERMARKS.with(|w| w.borrow_mut().insert(ckbtc_wm_key, updated_wm));
+                store_user_events(&principal, events);
+            }
+            Err(e) => ic_cdk::println!("ckBTC fetch error for {:?}: {}", principal, e),
+        }
+
+        // Fetch ckETH
+        let cketh_wm_key = WatermarkKey::new(&principal, &Chain::CkETH);
+        let cketh_wm = WATERMARKS.with(|w| w.borrow().get(&cketh_wm_key).unwrap_or_default());
+        match fetcher::fetch_cketh_transactions(account.clone(), &cketh_wm).await {
+            Ok(events) => {
+                let mut updated_wm = cketh_wm.clone();
+                update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
+                WATERMARKS.with(|w| w.borrow_mut().insert(cketh_wm_key, updated_wm));
+                store_user_events(&principal, events);
+            }
+            Err(e) => ic_cdk::println!("ckETH fetch error for {:?}: {}", principal, e),
+        }
+    }
+}
+
+/// Merge `new_events` into the per-user ring buffer in stable memory.
+fn store_user_events(principal: &Principal, new_events: Vec<UnifiedEvent>) {
+    if new_events.is_empty() {
+        return;
+    }
+    let key = user_events_key(principal);
+    let mut existing: Vec<UnifiedEvent> = USER_EVENTS.with(|ue| {
+        ue.borrow()
+            .get(&key)
+            .and_then(|b| candid::decode_one::<Vec<UnifiedEvent>>(&b).ok())
+            .unwrap_or_default()
+    });
+    merge_into_ring_buffer(&mut existing, new_events, MAX_EVENTS_PER_USER);
+    let encoded = candid::encode_one(&existing).unwrap_or_default();
+    USER_EVENTS.with(|ue| ue.borrow_mut().insert(key, encoded));
+}
+
+/// Build a WatermarkKey used as the user-events ring-buffer key.
+/// We use chain discriminant 0xFF to distinguish from watermark keys.
+fn user_events_key(principal: &Principal) -> WatermarkKey {
+    let pb = principal.as_slice();
+    let mut key = [0u8; 30];
+    let len = pb.len().min(29);
+    key[..len].copy_from_slice(&pb[..len]);
+    key[29] = 0xFF; // sentinel: not a real chain discriminant
+    WatermarkKey(key)
 }
 
 // ---------------------------------------------------------------------------

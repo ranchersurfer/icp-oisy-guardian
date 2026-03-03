@@ -57,6 +57,7 @@ export default function DocsView() {
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['docs'],
     queryFn: fetchDocs,
+    refetchInterval: 15000,
   })
 
   const folders = useMemo(() => Array.from(new Set(docs.map(d => d.folder))).sort(), [docs])

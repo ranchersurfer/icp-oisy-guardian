@@ -62,11 +62,13 @@ export default function ProjectDetail({ projectId }: { projectId: string }) {
   const { data: projects = [], isLoading: loadingProjects } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: () => fetch('/api/projects').then(r => r.json()),
+    refetchInterval: 15000,
   })
 
   const { data: allTasks = [] } = useQuery<Task[]>({
     queryKey: ['tasks'],
     queryFn: () => fetch('/api/tasks').then(r => r.json()),
+    refetchInterval: 15000,
   })
 
   const project = projects.find(p => p.id === projectId)

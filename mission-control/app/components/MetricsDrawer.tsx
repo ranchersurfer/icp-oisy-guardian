@@ -39,7 +39,7 @@ export default function MetricsDrawer({ open, onClose }: MetricsDrawerProps) {
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['metrics'],
     queryFn: fetchMetrics,
-    refetchInterval: 60000,
+    refetchInterval: 15000,
     enabled: open,
   })
 

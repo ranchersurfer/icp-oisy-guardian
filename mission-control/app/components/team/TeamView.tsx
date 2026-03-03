@@ -93,6 +93,12 @@ function AgentCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {status === 'working' && (
+            <span className="relative flex h-2 w-2 mr-1">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+          )}
           <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES[status]}`}>
             {STATUS_ICONS[status]}
             {status}
@@ -225,7 +231,7 @@ export default function TeamView() {
   const { data: state, isLoading } = useQuery({
     queryKey: ['agents'],
     queryFn: fetchAgents,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
 
   const agents = state?.agents || []
