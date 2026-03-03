@@ -1,0 +1,35 @@
+[
+  {
+    "id": "task-1",
+    "title": "Guardian Phase 1a",
+    "description": "Set up Guardian agent with Phase 1a capabilities including memory integration and tool access.",
+    "status": "in_progress",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "guardian",
+    "created_at": "2026-02-28T10:00:00Z",
+    "updated_at": "2026-03-01T14:30:00Z"
+  },
+  {
+    "id": "task-2",
+    "title": "Set up Prospector cron",
+    "description": "Configure cron job for Prospector agent to run daily research tasks and update workspace files.",
+    "status": "backlog",
+    "assignee": "mission-control",
+    "priority": "med",
+    "project_id": "prospector",
+    "created_at": "2026-03-01T09:00:00Z",
+    "updated_at": "2026-03-01T09:00:00Z"
+  },
+  {
+    "id": "task-3",
+    "title": "Creator content calendar Week 2",
+    "description": "Plan and schedule content creation tasks for Week 2, including blog posts, social media, and newsletters.",
+    "status": "backlog",
+    "assignee": "creator",
+    "priority": "low",
+    "project_id": "creator",
+    "created_at": "2026-03-02T08:00:00Z",
+    "updated_at": "2026-03-02T08:00:00Z"
+  }
+]

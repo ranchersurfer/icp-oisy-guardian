@@ -1,0 +1,11 @@
+type EngineHealthStatus = record {
+    cycle_balance : nat64;
+    last_tick : nat64;
+    is_running : bool;
+    watermark_count : nat64;
+};
+
+service : {
+    get_health : () -> (EngineHealthStatus) query;
+    set_config_canister_id : (principal) -> ();
+}

@@ -1,0 +1,15 @@
+[package]
+name = "guardian_engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-cdk = "0.13"
+ic-cdk-macros = "0.13"
+ic-cdk-timers = "0.7"
+candid = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+ic-stable-structures = "0.6"
+
+[lib]
+crate-type = ["cdylib"]

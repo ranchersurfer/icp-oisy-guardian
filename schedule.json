@@ -1,0 +1,67 @@
+[
+  {
+    "id": "sched-1",
+    "title": "Dream Cycle – Memory Consolidation",
+    "description": "Nightly memory consolidation: reads daily logs, extracts insights, updates Tier 2 memory files, writes morning brief.",
+    "schedule": "0 1 * * *",
+    "schedule_description": "Daily at 1:00 AM PST",
+    "agent_id": "dream-cycle",
+    "type": "cron",
+    "next_run_at": "2026-03-03T01:00:00-08:00",
+    "last_run_at": null,
+    "source_file": "scripts/dream-cycle.sh",
+    "status": "active"
+  },
+  {
+    "id": "sched-2",
+    "title": "Guardian Phase 1a Deadline",
+    "description": "Config Canister hardening: rate limiting, validation, cycle monitoring. Deadline for Phase 1a delivery.",
+    "schedule": "2026-03-08T00:00:00-08:00",
+    "schedule_description": "Mar 8 deadline",
+    "agent_id": "guardian-dev",
+    "type": "one_off",
+    "next_run_at": "2026-03-08T00:00:00-08:00",
+    "last_run_at": null,
+    "source_file": "guardian-icp/DEV_PLAN.md",
+    "status": "active"
+  },
+  {
+    "id": "sched-3",
+    "title": "Guardian Phase 1b Deadline",
+    "description": "Transaction Guardian engine: rule evaluation, spending limits, whitelist enforcement. Phase 1b delivery.",
+    "schedule": "2026-03-15T00:00:00-08:00",
+    "schedule_description": "Mar 8–15 sprint",
+    "agent_id": "guardian-dev",
+    "type": "one_off",
+    "next_run_at": "2026-03-15T00:00:00-08:00",
+    "last_run_at": null,
+    "source_file": "guardian-icp/DEV_PLAN.md",
+    "status": "active"
+  },
+  {
+    "id": "sched-4",
+    "title": "Creator – Daily Content Research",
+    "description": "Daily content research, trend analysis, draft posts across horror/AI/OpenClaw niches.",
+    "schedule": "0 8 * * *",
+    "schedule_description": "Daily at 8:00 AM",
+    "agent_id": "creator",
+    "type": "cron",
+    "next_run_at": null,
+    "last_run_at": null,
+    "source_file": "creator/CONTENT_STRATEGY.md",
+    "status": "planned"
+  },
+  {
+    "id": "sched-5",
+    "title": "Prospector – Lead Scan",
+    "description": "Scan Upwork, LinkedIn for AI automation opportunities. Filter and queue qualified leads.",
+    "schedule": "0 */6 * * *",
+    "schedule_description": "Every 6 hours",
+    "agent_id": "prospector",
+    "type": "cron",
+    "next_run_at": null,
+    "last_run_at": null,
+    "source_file": "prospector/PROSPECTOR_RULES.md",
+    "status": "planned"
+  }
+]
