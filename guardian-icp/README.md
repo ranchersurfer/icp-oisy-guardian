@@ -1,4 +1,6 @@
-# Guardian ICP — Phase 1 MVP
+# Guardian ICP — Phase 1 MVP ✅
+
+**Status:** Phase 1 complete (local deployment tested, 143 tests passing)
 
 Real-time wallet monitoring for OISY on the Internet Computer. Detects suspicious activity across ICP, ckBTC, and ckETH by analyzing ICRC-1/ICRC-3 transaction history.
 
