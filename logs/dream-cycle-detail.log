@@ -1,2 +1,0 @@
-Config warnings:\n- plugins.entries.discord: plugin discord: duplicate plugin id detected; later plugin may be overridden (/home/ranch/.nvm/versions/node/v22.22.0/lib/node_modules/openclaw/extensions/discord/index.ts)
-Error: Pass --to <E.164>, --session-id, or --agent to choose a session
