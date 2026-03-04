@@ -94,12 +94,13 @@ pub enum AlertStatus {
 // ---------------------------------------------------------------------------
 
 /// Normalised transaction event across all monitored chains.
+/// `amount_e8s` is u128 to support ckETH (18 decimals, max ~10^21 Wei > u64::MAX).
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub struct UnifiedEvent {
     pub chain: String,
     pub timestamp: u64,
     pub direction: Direction,
-    pub amount_e8s: u64,
+    pub amount_e8s: u128,
     pub counterparty: Principal,
     pub tx_id: String,
 }
@@ -430,7 +431,9 @@ async fn run_fetch_cycle(now_ns: u64) {
         // Try ICP ledger first; on failure fall back to estimation from tx history.
         let icp_ledger = candid::Principal::from_text(canisters::ICP_LEDGER_CANISTER_ID)
             .expect("ICP_LEDGER_CANISTER_ID is a valid principal");
-        let balance_e8s: Option<u64> = match ic_cdk::call::<(IcrcAccount,), (candid::Nat,)>(
+        // icrc1_balance_of returns `nat` which we decode as u128 for ckETH compatibility.
+        // ckETH uses 18 decimals; 1000 ETH = 10^21 Wei which overflows u64.
+        let balance_e8s: Option<u128> = match ic_cdk::call::<(IcrcAccount,), (candid::Nat,)>(
             icp_ledger,
             "icrc1_balance_of",
             (account.clone(),),
@@ -448,15 +451,16 @@ async fn run_fetch_cycle(now_ns: u64) {
         // Load all stored events for this user and run rule evaluation.
         let user_events = load_user_events(&principal);
         if !user_events.is_empty() {
-            // Fallback balance estimate: sum(In) - sum(Out), used when balance_e8s is None
-            let total_in: u64 = user_events.iter()
+            // Fallback balance estimate: sum(In) - sum(Out), used when balance_e8s is None.
+            // Use u128 to prevent overflow for ckETH balances.
+            let total_in: u128 = user_events.iter()
                 .filter(|e| e.direction == Direction::In)
                 .map(|e| e.amount_e8s)
-                .fold(0u64, |a, x| a.saturating_add(x));
-            let total_out: u64 = user_events.iter()
+                .fold(0u128, |a, x| a.saturating_add(x));
+            let total_out: u128 = user_events.iter()
                 .filter(|e| e.direction == Direction::Out)
                 .map(|e| e.amount_e8s)
-                .fold(0u64, |a, x| a.saturating_add(x));
+                .fold(0u128, |a, x| a.saturating_add(x));
             let estimated_balance = total_in.saturating_sub(total_out);
 
             // Default config values (Phase 2: fetch from config canister)
@@ -992,7 +996,7 @@ mod tests {
             DetectionContext, Severity,
         };
 
-        fn make_out_event(amount: u64, counterparty: Principal, ts: u64) -> UnifiedEvent {
+        fn make_out_event(amount: u128, counterparty: Principal, ts: u64) -> UnifiedEvent {
             UnifiedEvent {
                 chain: "ICP".to_string(),
                 timestamp: ts,
@@ -1003,7 +1007,7 @@ mod tests {
             }
         }
 
-        fn make_in_event(amount: u64, ts: u64) -> UnifiedEvent {
+        fn make_in_event(amount: u128, ts: u64) -> UnifiedEvent {
             UnifiedEvent {
                 chain: "ICP".to_string(),
                 timestamp: ts,
@@ -1169,7 +1173,7 @@ mod tests {
 
         fn make_ctx<'a>(
             events: &'a [UnifiedEvent],
-            balance: u64,
+            balance: u128,
             allowlist: &'a [String],
             threshold: u8,
         ) -> DetectionContext<'a> {

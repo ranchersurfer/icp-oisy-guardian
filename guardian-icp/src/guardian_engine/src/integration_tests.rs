@@ -24,7 +24,7 @@ mod integration_tests {
         Principal::from_slice(&[seed; 29])
     }
 
-    fn make_out_event(ts: u64, amount: u64, counterparty: Principal) -> UnifiedEvent {
+    fn make_out_event(ts: u64, amount: u128, counterparty: Principal) -> UnifiedEvent {
         UnifiedEvent {
             chain: "ICP".to_string(),
             timestamp: ts,
@@ -35,7 +35,7 @@ mod integration_tests {
         }
     }
 
-    fn make_in_event(ts: u64, amount: u64, sender: Principal) -> UnifiedEvent {
+    fn make_in_event(ts: u64, amount: u128, sender: Principal) -> UnifiedEvent {
         UnifiedEvent {
             chain: "ICP".to_string(),
             timestamp: ts,
@@ -48,7 +48,7 @@ mod integration_tests {
 
     fn make_ctx<'a>(
         events: &'a [UnifiedEvent],
-        balance: u64,
+        balance: u128,
         allowlist: &'a [String],
         threshold: u8,
     ) -> DetectionContext<'a> {
@@ -61,7 +61,7 @@ mod integration_tests {
         }
     }
 
-    fn default_icrc_tx(id: u64, amount: u64, from_seed: u8, to_seed: u8) -> IcrcTransaction {
+    fn default_icrc_tx(id: u64, amount: u128, from_seed: u8, to_seed: u8) -> IcrcTransaction {
         IcrcTransaction {
             id,
             timestamp: 1_700_000_000_000_000_000 + id * 1_000_000_000,
@@ -373,10 +373,10 @@ mod integration_tests {
     #[test]
     fn test_icrc_tx_max_amount() {
         let user = make_principal(1);
-        let tx = default_icrc_tx(300, u64::MAX, 1, 2);
+        let tx = default_icrc_tx(300, u64::MAX as u128, 1, 2);
         let account = IcrcAccount { owner: user, subaccount: None };
         let event = icrc_tx_to_unified_event(&tx, &account, "ICP");
-        assert_eq!(event.amount_e8s, u64::MAX);
+        assert_eq!(event.amount_e8s, u64::MAX as u128);
     }
 
     #[test]

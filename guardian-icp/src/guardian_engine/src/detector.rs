@@ -80,11 +80,12 @@ pub struct DetectionResult {
 // ---------------------------------------------------------------------------
 
 /// Triggered when any single outgoing transfer > 50% of estimated balance.
-/// `estimated_balance_e8s`: estimated total balance (sum of all amounts seen).
+/// Uses u128 to support ckETH (18 decimals, max ~10^21 Wei which overflows u64).
+/// `estimated_balance_e8s`: estimated total balance.
 /// Returns Some(RuleMatch) if triggered.
 pub fn rule_a1_large_transfer(
     events: &[UnifiedEvent],
-    estimated_balance_e8s: u64,
+    estimated_balance_e8s: u128,
 ) -> Option<RuleMatch> {
     if estimated_balance_e8s == 0 {
         return None;
@@ -196,10 +197,11 @@ pub fn rule_a2_known_scam_address(_events: &[UnifiedEvent]) -> Option<RuleMatch>
 
 pub struct DetectionContext<'a> {
     pub events: &'a [UnifiedEvent],
-    pub estimated_balance_e8s: u64,
-    /// Actual balance from icrc1_balance_of, if the call succeeded.
+    /// Estimated balance from tx history (u128 to support ckETH 18-decimal scale).
+    pub estimated_balance_e8s: u128,
+    /// Actual balance from icrc1_balance_of (u128 for ckETH compatibility).
     /// When present, used instead of estimated_balance_e8s for A1 evaluation.
-    pub balance_e8s: Option<u64>,
+    pub balance_e8s: Option<u128>,
     pub allowlisted_addresses: &'a [String],
     pub alert_threshold: u8,
 }
@@ -208,7 +210,8 @@ pub fn evaluate(ctx: &DetectionContext) -> DetectionResult {
     let mut rules_triggered: Vec<RuleMatch> = Vec::new();
 
     // Use actual balance when available, fall back to tx-history estimate.
-    let effective_balance = ctx.balance_e8s.unwrap_or(ctx.estimated_balance_e8s);
+    // Both are u128 to support ckETH 18-decimal scale.
+    let effective_balance: u128 = ctx.balance_e8s.unwrap_or(ctx.estimated_balance_e8s);
 
     if let Some(m) = rule_a1_large_transfer(ctx.events, effective_balance) {
         rules_triggered.push(m);
@@ -236,5 +239,67 @@ pub fn evaluate(ctx: &DetectionContext) -> DetectionResult {
         severity,
         rules_triggered,
         should_alert,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candid::Principal;
+    use crate::{Direction, UnifiedEvent};
+
+    fn make_out_event(amount: u128, ts: u64) -> UnifiedEvent {
+        UnifiedEvent {
+            chain: "ckETH".to_string(),
+            timestamp: ts,
+            direction: Direction::Out,
+            amount_e8s: amount,
+            counterparty: Principal::anonymous(),
+            tx_id: format!("tx-{}", ts),
+        }
+    }
+
+    /// Demonstrates that u64 would overflow for 1000 ETH in Wei.
+    /// 1000 ETH = 10^21 Wei. u64::MAX ≈ 1.8 × 10^19.
+    #[test]
+    fn test_cketh_balance_overflow_u64() {
+        let one_thousand_eth_wei: u128 = 1_000 * 10u128.pow(18); // 10^21
+        // Confirm it exceeds u64::MAX
+        assert!(
+            one_thousand_eth_wei > u64::MAX as u128,
+            "1000 ETH in Wei ({}) should exceed u64::MAX ({})",
+            one_thousand_eth_wei,
+            u64::MAX
+        );
+        // u64 truncation would produce a wrong value
+        let truncated = one_thousand_eth_wei as u64;
+        // truncated != one_thousand_eth_wei when cast back
+        assert_ne!(truncated as u128, one_thousand_eth_wei);
+    }
+
+    /// Demonstrates that u128 handles 1000 ETH balances correctly.
+    #[test]
+    fn test_cketh_balance_u128_handles_1000_eth() {
+        let one_thousand_eth_wei: u128 = 1_000 * 10u128.pow(18); // 1_000_000_000_000_000_000_000
+
+        // A transfer of 600 ETH (600 * 10^18) should trigger A1 (>50% of 1000 ETH balance)
+        let six_hundred_eth: u128 = 600 * 10u128.pow(18);
+        let events = vec![make_out_event(six_hundred_eth, 1000)];
+
+        let result = rule_a1_large_transfer(&events, one_thousand_eth_wei);
+        assert!(
+            result.is_some(),
+            "600 ETH transfer (>50% of 1000 ETH balance) should trigger A1"
+        );
+        assert_eq!(result.unwrap().rule_id, "A1");
+
+        // A transfer of 400 ETH should NOT trigger A1 (<=50%)
+        let four_hundred_eth: u128 = 400 * 10u128.pow(18);
+        let events2 = vec![make_out_event(four_hundred_eth, 2000)];
+        let result2 = rule_a1_large_transfer(&events2, one_thousand_eth_wei);
+        assert!(
+            result2.is_none(),
+            "400 ETH transfer (<=50% of 1000 ETH balance) should NOT trigger A1"
+        );
     }
 }

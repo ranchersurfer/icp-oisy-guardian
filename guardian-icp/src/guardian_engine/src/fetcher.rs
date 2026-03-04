@@ -18,7 +18,13 @@ use crate::canisters::{
     MAX_RESULTS_PER_FETCH,
 };
 #[cfg(not(test))]
-use crate::icrc::{GetTransactionsRequest, GetTransactionsResponse};
+use crate::icrc::{
+    GetTransactionsRequest,
+    IcrcGetTransactionsResult,
+    IcpGetTransactionsResult,
+    icrc_wire_to_internal,
+    icp_wire_to_internal,
+};
 
 use crate::icrc::{IcrcAccount, IcrcTransaction};
 use crate::{Direction, UnifiedEvent, Watermark};
@@ -86,6 +92,7 @@ pub fn is_permanent_error(err: &str) -> bool {
 
 /// Convert an `IcrcTransaction` to a `UnifiedEvent` from the perspective of
 /// the monitored `account`.
+/// `amount_e8s` is u128 to support ckETH (18 decimals, up to ~10^21 Wei).
 pub fn icrc_tx_to_unified_event(
     tx: &IcrcTransaction,
     account: &IcrcAccount,
@@ -107,7 +114,7 @@ pub fn icrc_tx_to_unified_event(
         chain: chain_name.to_string(),
         timestamp: tx.timestamp,
         direction,
-        amount_e8s: tx.amount,
+        amount_e8s: tx.amount, // u128
         counterparty,
         tx_id: tx.id.to_string(),
     }
@@ -118,28 +125,61 @@ pub fn icrc_tx_to_unified_event(
 // ---------------------------------------------------------------------------
 
 /// Fetch ICP transactions for `account` since the watermark's last block height.
-/// On any error: logs the problem and returns an empty Vec (no panic).
+/// Uses ICP-specific wire types (Operation variant, text AccountIdentifiers).
+/// On any error: logs the problem and returns Err (callers return empty vec).
 #[cfg(not(test))]
 pub async fn fetch_icp_transactions(
     account: IcrcAccount,
     watermark: &Watermark,
 ) -> Result<Vec<UnifiedEvent>, String> {
-    fetch_transactions_from_index(
-        ICP_INDEX_CANISTER_ID,
-        "ICP",
-        account,
-        watermark,
+    let canister_id = Principal::from_text(ICP_INDEX_CANISTER_ID)
+        .map_err(|e| format!("Invalid canister id {}: {}", ICP_INDEX_CANISTER_ID, e))?;
+
+    let start = if watermark.block_height > 0 {
+        Some(candid::Nat::from(watermark.block_height))
+    } else {
+        None
+    };
+
+    let request = GetTransactionsRequest {
+        account: account.clone(),
+        start,
+        max_results: candid::Nat::from(MAX_RESULTS_PER_FETCH),
+    };
+
+    let result: Result<(IcpGetTransactionsResult,), _> = ic_cdk::call(
+        canister_id,
+        "get_account_transactions",
+        (request,),
     )
-    .await
+    .await;
+
+    match result {
+        Ok((Ok(response),)) => {
+            let events = response
+                .transactions
+                .iter()
+                .filter_map(|tx_with_id| icp_wire_to_internal(tx_with_id))
+                .map(|tx| icrc_tx_to_unified_event(&tx, &account, "ICP"))
+                .collect();
+            Ok(events)
+        }
+        Ok((Err(e),)) => Err(format!("ICP index returned error: {}", e.message)),
+        Err((code, msg)) => Err(format!(
+            "Inter-canister call to ICP ({}) failed: {:?} {}",
+            ICP_INDEX_CANISTER_ID, code, msg
+        )),
+    }
 }
 
 /// Fetch ckBTC transactions for `account` since the watermark's last block height.
+/// Uses ICRC Index NG wire types (nested transfer/mint/burn, nat amounts).
 #[cfg(not(test))]
 pub async fn fetch_ckbtc_transactions(
     account: IcrcAccount,
     watermark: &Watermark,
 ) -> Result<Vec<UnifiedEvent>, String> {
-    fetch_transactions_from_index(
+    fetch_icrc_index_ng_transactions(
         CKBTC_INDEX_CANISTER_ID,
         "ckBTC",
         account,
@@ -149,12 +189,13 @@ pub async fn fetch_ckbtc_transactions(
 }
 
 /// Fetch ckETH transactions for `account` since the watermark's last block height.
+/// Uses ICRC Index NG wire types. ckETH amounts are in Wei (18 decimals) — u128 required.
 #[cfg(not(test))]
 pub async fn fetch_cketh_transactions(
     account: IcrcAccount,
     watermark: &Watermark,
 ) -> Result<Vec<UnifiedEvent>, String> {
-    fetch_transactions_from_index(
+    fetch_icrc_index_ng_transactions(
         CKETH_INDEX_CANISTER_ID,
         "ckETH",
         account,
@@ -163,11 +204,12 @@ pub async fn fetch_cketh_transactions(
     .await
 }
 
-/// Generic fetcher: calls `get_account_transactions` on `canister_id`, maps
-/// results into `UnifiedEvent`, and returns them.  On any inter-canister or
-/// decode error the error message is returned (callers log + return empty vec).
+/// Generic ICRC Index NG fetcher for ckBTC/ckETH.
+/// Response is `variant { Ok: GetTransactions; Err: GetTransactionsErr }`.
+/// Transactions are nested: tx.transaction.transfer.{from, to, amount}.
+/// `amount` is `nat` (Nat), decoded as u128 for ckETH compatibility.
 #[cfg(not(test))]
-async fn fetch_transactions_from_index(
+async fn fetch_icrc_index_ng_transactions(
     canister_id_str: &str,
     chain_name: &str,
     account: IcrcAccount,
@@ -176,9 +218,8 @@ async fn fetch_transactions_from_index(
     let canister_id = Principal::from_text(canister_id_str)
         .map_err(|e| format!("Invalid canister id {}: {}", canister_id_str, e))?;
 
-    // Use the watermark block_height as the start (0 = from beginning).
     let start = if watermark.block_height > 0 {
-        Some(watermark.block_height)
+        Some(candid::Nat::from(watermark.block_height))
     } else {
         None
     };
@@ -186,10 +227,10 @@ async fn fetch_transactions_from_index(
     let request = GetTransactionsRequest {
         account: account.clone(),
         start,
-        max_results: MAX_RESULTS_PER_FETCH,
+        max_results: candid::Nat::from(MAX_RESULTS_PER_FETCH),
     };
 
-    let result: Result<(GetTransactionsResponse,), _> = ic_cdk::call(
+    let result: Result<(IcrcGetTransactionsResult,), _> = ic_cdk::call(
         canister_id,
         "get_account_transactions",
         (request,),
@@ -197,14 +238,19 @@ async fn fetch_transactions_from_index(
     .await;
 
     match result {
-        Ok((response,)) => {
+        Ok((Ok(response),)) => {
             let events = response
                 .transactions
                 .iter()
-                .map(|tx| icrc_tx_to_unified_event(tx, &account, chain_name))
+                .filter_map(|tx_with_id| icrc_wire_to_internal(tx_with_id))
+                .map(|tx| icrc_tx_to_unified_event(&tx, &account, chain_name))
                 .collect();
             Ok(events)
         }
+        Ok((Err(e),)) => Err(format!(
+            "{} index returned error: {}",
+            chain_name, e.message
+        )),
         Err((code, msg)) => Err(format!(
             "Inter-canister call to {} ({}) failed: {:?} {}",
             chain_name, canister_id_str, code, msg
@@ -275,7 +321,7 @@ mod tests {
         Principal::from_slice(&[8u8; 29])
     }
 
-    fn make_tx(id: u64, to: Principal, from: Principal, amount: u64) -> IcrcTransaction {
+    fn make_tx(id: u64, to: Principal, from: Principal, amount: u128) -> IcrcTransaction {
         IcrcTransaction {
             id,
             timestamp: 1_000_000 + id,
@@ -446,23 +492,23 @@ mod tests {
 
     #[test]
     fn test_ring_buffer_trims_to_max_cap() {
-        let mut buf: Vec<UnifiedEvent> = (0..90)
+        let mut buf: Vec<UnifiedEvent> = (0u64..90)
             .map(|i| UnifiedEvent {
                 chain: "ICP".to_string(),
                 timestamp: i,
                 direction: Direction::In,
-                amount_e8s: i,
+                amount_e8s: i as u128,
                 counterparty: anon(),
                 tx_id: i.to_string(),
             })
             .collect();
 
-        let new_events: Vec<UnifiedEvent> = (90..120)
+        let new_events: Vec<UnifiedEvent> = (90u64..120)
             .map(|i| UnifiedEvent {
                 chain: "ICP".to_string(),
                 timestamp: i,
                 direction: Direction::In,
-                amount_e8s: i,
+                amount_e8s: i as u128,
                 counterparty: anon(),
                 tx_id: i.to_string(),
             })
@@ -478,12 +524,12 @@ mod tests {
     #[test]
     fn test_ring_buffer_under_cap_unchanged() {
         let mut buf: Vec<UnifiedEvent> = vec![];
-        let new_events: Vec<UnifiedEvent> = (0..50)
+        let new_events: Vec<UnifiedEvent> = (0u64..50)
             .map(|i| UnifiedEvent {
                 chain: "ICP".to_string(),
                 timestamp: i,
                 direction: Direction::In,
-                amount_e8s: i,
+                amount_e8s: i as u128,
                 counterparty: anon(),
                 tx_id: i.to_string(),
             })
@@ -630,7 +676,7 @@ mod tests {
         let user = user_principal();
         let account = IcrcAccount::new(user);
         let txs: Vec<IcrcTransaction> = (0u64..1000)
-            .map(|i| make_tx(i, user, other_principal(), 1000 + i))
+            .map(|i| make_tx(i, user, other_principal(), 1000 + i as u128))
             .collect();
         let events: Vec<UnifiedEvent> = txs
             .iter()
