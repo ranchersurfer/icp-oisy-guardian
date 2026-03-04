@@ -17,7 +17,7 @@ All 5 phases of Guardian Phase 1 MVP have been completed ahead of schedule.
 | 1b    | ✅ Done | Mar 2      | Engine skeleton (timer, stable storage, health endpoint) |
 | 1c    | ✅ Done | Mar 3      | ICRC integration (ICP/ckBTC/ckETH fetching, 48 tests) |
 | 1d    | ✅ Done | Mar 4      | Detection engine (rules A1/A3/A4, severity scoring, 33 detector tests, 182 total) |
-| 1e    | ✅ Done | Mar 3      | Testing, local deployment, docs (157 tests, v0.1-mvp tagged) |
+| 1e    | ✅ Done | Mar 4      | Testing, local deployment, docs (200 tests, zero clippy warnings, v0.1-mvp tagged) |
 
 ---
 
@@ -25,13 +25,13 @@ All 5 phases of Guardian Phase 1 MVP have been completed ahead of schedule.
 
 **Git:** `github.com:ranchersurfer/icp-oisy-guardian.git`  
 **Branch:** `main`  
-**Commit:** `8b45fdf` — "feat: Phase 1 MVP complete - local deployment working"  
+**Commit:** `b71ae41` — "feat: Phase 1 MVP complete - local deployment + comprehensive testing (1e)"  
 **Tag:** `v0.1-mvp`  
 
 **Test Results:**
-- 157 total tests (14 config + 143 engine)
-- 0 failures
-- Integration test suite covering all major scenarios
+- 200 total tests (18 config + 182 engine)
+- 0 failures, 0 clippy warnings
+- 50+ integration tests covering full monitoring cycles, upgrade safety, rate limiting
 
 **Canisters Deployed (local):**
 - `guardian_config`: `uxrrr-q7777-77774-qaaaq-cai`
