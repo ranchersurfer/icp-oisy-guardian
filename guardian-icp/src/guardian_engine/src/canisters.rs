@@ -1,4 +1,28 @@
-/// ICP Ledger canister (mainnet) — used for icrc1_balance_of queries.
+// ---------------------------------------------------------------------------
+// Phase 2c: Config canister inter-canister call types
+// ---------------------------------------------------------------------------
+
+use candid::{CandidType, Deserialize};
+
+/// Mirror of the guardian_config canister's `ApiResult` type.
+/// Used to decode the response from `get_config_for_user`.
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub enum ApiResult<T> {
+    Ok(T),
+    Err(String),
+}
+
+/// Minimal projection of `GuardianConfig` — only the fields needed for delivery routing.
+///
+/// We don't need to decode the entire config; only `alert_channels` matters for Phase 2c.
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct GuardianConfigChannels {
+    /// Alert channel descriptor strings (e.g. `"discord;url=https://…"`).
+    pub alert_channels: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// ICP Ledger canister (mainnet) — used for icrc1_balance_of queries.
 pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
 /// ckBTC Ledger canister (mainnet) — used for icrc1_balance_of queries.

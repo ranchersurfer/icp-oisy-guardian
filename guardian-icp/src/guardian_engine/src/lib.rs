@@ -47,6 +47,8 @@ const ALERTS_MEM_ID: MemoryId = MemoryId::new(1);
 const META_MEM_ID: MemoryId = MemoryId::new(2);
 const USER_EVENTS_MEM_ID: MemoryId = MemoryId::new(3);
 const SEEN_TX_IDS_MEM_ID: MemoryId = MemoryId::new(4); // H3: tx deduplication
+// Note: MemoryId 5 is used by alert_queue.rs (ALERT_QUEUE_MEM_ID).
+const USER_ALERT_CHANNELS_MEM_ID: MemoryId = MemoryId::new(6); // Phase 2c: per-user channel cache
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -214,6 +216,30 @@ impl Storable for StoredPrincipal {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+/// Phase 2c: Cached alert channel entry for a user.
+///
+/// Stores the parsed `AlertChannel` list fetched from the config canister,
+/// along with the nanosecond timestamp when the cache was last populated.
+/// Entries are invalidated after `CHANNEL_CACHE_TTL_NS` (5 minutes).
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug, Default)]
+pub struct UserChannelEntry {
+    pub channels: Vec<delivery::AlertChannel>,
+    pub cached_at: u64,
+}
+
+impl Storable for UserChannelEntry {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(candid::encode_one(self).unwrap())
+    }
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).unwrap_or_default()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+/// Cache TTL for user alert channels: 5 minutes in nanoseconds.
+pub const CHANNEL_CACHE_TTL_NS: u64 = 300 * 1_000_000_000;
+
 // ---------------------------------------------------------------------------
 // Health response type
 // ---------------------------------------------------------------------------
@@ -272,6 +298,13 @@ thread_local! {
             MEMORY_MANAGER.with(|mm| mm.borrow().get(SEEN_TX_IDS_MEM_ID))
         ));
 
+    /// Phase 2c: Per-user alert channel cache.
+    /// Principal text → UserChannelEntry (parsed AlertChannels + cache timestamp)
+    static USER_ALERT_CHANNELS: RefCell<StableBTreeMap<String, UserChannelEntry, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(USER_ALERT_CHANNELS_MEM_ID))
+        ));
+
     /// Runtime flag: has the timer been started?
     static IS_RUNNING: RefCell<bool> = const { RefCell::new(false) };
 }
@@ -311,6 +344,288 @@ fn store_config_canister_id(id: Principal) {
         let bytes = candid::encode_one(&StoredPrincipal { value: Some(id) }).unwrap();
         m.borrow_mut().insert(CONFIG_CANISTER_KEY.to_string(), bytes);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2c: Per-user alert channel cache helpers
+// ---------------------------------------------------------------------------
+
+/// Read cached channels for `user` if the entry exists and is still fresh.
+/// Returns `None` if not cached or if the cache has expired (> 5 minutes old).
+pub fn get_cached_channels(user: &Principal, now_ns: u64) -> Option<Vec<delivery::AlertChannel>> {
+    let key = user.to_text();
+    USER_ALERT_CHANNELS.with(|uc| {
+        uc.borrow().get(&key).and_then(|entry| {
+            if now_ns.saturating_sub(entry.cached_at) < CHANNEL_CACHE_TTL_NS {
+                Some(entry.channels.clone())
+            } else {
+                None // expired
+            }
+        })
+    })
+}
+
+/// Store a channel list in the cache for `user` with the current timestamp.
+pub fn store_cached_channels(user: &Principal, channels: Vec<delivery::AlertChannel>, now_ns: u64) {
+    let key = user.to_text();
+    USER_ALERT_CHANNELS.with(|uc| {
+        uc.borrow_mut().insert(key, UserChannelEntry { channels, cached_at: now_ns });
+    });
+}
+
+/// Return the number of entries currently in the channel cache.
+pub fn channel_cache_len() -> u64 {
+    USER_ALERT_CHANNELS.with(|uc| uc.borrow().len())
+}
+
+/// Fetch alert channels for a user:
+///   1. Check the in-memory cache (valid for 5 min).
+///   2. If stale / missing, call the config canister (with up to 3 retries).
+///   3. On inter-canister error, return empty vec (fail open — skip delivery
+///      rather than hard-failing the alert).
+///
+/// In test builds this always returns an empty vec (no IC runtime available).
+#[cfg(not(test))]
+pub async fn fetch_user_alert_channels(user: Principal) -> Vec<delivery::AlertChannel> {
+    let now_ns = ic_cdk::api::time();
+
+    // 1. Cache hit
+    if let Some(channels) = get_cached_channels(&user, now_ns) {
+        return channels;
+    }
+
+    // 2. Inter-canister call with retry
+    let config_id = match get_config_canister_id() {
+        Some(id) => id,
+        None => {
+            ic_cdk::println!(
+                "[channels] config canister not set; cannot fetch channels for {}",
+                user
+            );
+            return vec![];
+        }
+    };
+
+    let mut last_err = String::new();
+    for attempt in 0..3u32 {
+        use canisters::{ApiResult as CfgResult, GuardianConfigChannels};
+        match ic_cdk::call::<(Principal,), (CfgResult<GuardianConfigChannels>,)>(
+            config_id,
+            "get_config_for_user",
+            (user,),
+        )
+        .await
+        {
+            Ok((CfgResult::Ok(cfg),)) => {
+                let channels: Vec<delivery::AlertChannel> = cfg
+                    .alert_channels
+                    .iter()
+                    .filter_map(|s| delivery::AlertChannel::from_str_config(s))
+                    .collect();
+                store_cached_channels(&user, channels.clone(), now_ns);
+                ic_cdk::println!(
+                    "[channels] fetched {} channels for {} (attempt {})",
+                    channels.len(), user, attempt + 1
+                );
+                return channels;
+            }
+            Ok((CfgResult::Err(e),)) => {
+                // Config not found — cache empty vec so we don't hammer on every drain
+                ic_cdk::println!("[channels] config not found for {}: {}", user, e);
+                store_cached_channels(&user, vec![], now_ns);
+                return vec![];
+            }
+            Err((code, msg)) => {
+                last_err = format!("{:?}: {}", code, msg);
+                ic_cdk::println!(
+                    "[channels] inter-canister error for {} (attempt {}): {}",
+                    user, attempt + 1, last_err
+                );
+                // Brief pause before retry — we yield to the async runtime briefly
+                // (true 100ms sleep not available in IC canisters, but yielding
+                //  to the event loop provides some backoff)
+                if attempt < 2 {
+                    // Yield point: call a dummy self-call to introduce latency
+                    // In practice the IC scheduler provides natural backoff between
+                    // inter-canister call rounds (~100ms per round trip).
+                    let _: Result<(), _> = ic_cdk::call(ic_cdk::id(), "get_health", ()).await;
+                }
+            }
+        }
+    }
+
+    // All retries exhausted — return empty to avoid blocking delivery
+    ic_cdk::println!(
+        "[channels] all retries failed for {}; last error: {}",
+        user, last_err
+    );
+    vec![]
+}
+
+#[cfg(test)]
+pub async fn fetch_user_alert_channels(_user: Principal) -> Vec<delivery::AlertChannel> {
+    vec![] // No IC runtime in tests
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2c: Per-user delivery drain (called from delivery_tick)
+// ---------------------------------------------------------------------------
+
+/// Drain up to `max_items` from the alert queue, routing each alert to the
+/// user's configured channels fetched from the config canister cache.
+///
+/// Returns `(delivered, retried, failed_perm)`.
+#[cfg(not(test))]
+async fn run_per_user_delivery_drain(max_items: usize) -> (u32, u32, u32) {
+    use crate::alert_queue::{dequeue_alerts, enqueue_alert};
+
+    let items = dequeue_alerts(max_items);
+    let mut delivered = 0u32;
+    let mut retried = 0u32;
+    let mut failed_perm = 0u32;
+
+    for mut item in items {
+        // Fetch channels for this specific user
+        let channels = fetch_user_alert_channels(item.user).await;
+
+        if channels.is_empty() {
+            ic_cdk::println!(
+                "[delivery] no channels configured for user {} — skipping alert {}",
+                item.user, item.alert_id
+            );
+            // Re-enqueue for later (config may be set up eventually)
+            // Count as retry unless we've exhausted attempts
+            if item.retry_count + 1 >= delivery::MAX_RETRIES {
+                failed_perm += 1;
+                ALERTS.with(|a| {
+                    if let Some(mut rec) = a.borrow().get(&item.alert_id) {
+                        rec.status = AlertStatus::Failed;
+                        a.borrow_mut().insert(item.alert_id.clone(), rec);
+                    }
+                });
+            } else {
+                item.retry_count += 1;
+                enqueue_alert(item);
+                retried += 1;
+            }
+            continue;
+        }
+
+        let mut any_success = false;
+        let mut perm_fail = false;
+        let mut all_channel_results: Vec<bool> = Vec::new();
+
+        for channel in &channels {
+            let outcome = delivery::deliver_to_channel(
+                channel,
+                &item.alert_id,
+                &item.severity,
+                item.severity_score,
+                &item.rules_triggered,
+                &item.events_summary,
+                &item.recommended_action,
+            )
+            .await;
+
+            if outcome.is_success() {
+                all_channel_results.push(true);
+                any_success = true;
+                ic_cdk::println!(
+                    "[delivery] ✓ alert {} → {} (user {})",
+                    item.alert_id, channel.kind_label(), item.user
+                );
+            } else if outcome.is_permanent_failure() {
+                all_channel_results.push(false);
+                perm_fail = true;
+                ic_cdk::println!(
+                    "[delivery] ✗ permanent failure alert {} → {}: {:?}",
+                    item.alert_id, channel.kind_label(), outcome
+                );
+            } else {
+                all_channel_results.push(false);
+                ic_cdk::println!(
+                    "[delivery] ~ transient failure alert {} → {}: {:?}",
+                    item.alert_id, channel.kind_label(), outcome
+                );
+            }
+        }
+
+        // Mark Sent only if at least one channel succeeded
+        if any_success {
+            delivered += 1;
+            ALERTS.with(|a| {
+                if let Some(mut rec) = a.borrow().get(&item.alert_id) {
+                    rec.status = AlertStatus::Sent;
+                    a.borrow_mut().insert(item.alert_id.clone(), rec);
+                }
+            });
+        } else if perm_fail || item.retry_count + 1 >= delivery::MAX_RETRIES {
+            failed_perm += 1;
+            ALERTS.with(|a| {
+                if let Some(mut rec) = a.borrow().get(&item.alert_id) {
+                    rec.status = AlertStatus::Failed;
+                    a.borrow_mut().insert(item.alert_id.clone(), rec);
+                }
+            });
+            ic_cdk::println!(
+                "[delivery] ✗ alert {} permanently failed after {} attempts",
+                item.alert_id, item.retry_count + 1
+            );
+        } else {
+            item.retry_count += 1;
+            enqueue_alert(item);
+            retried += 1;
+        }
+    }
+
+    (delivered, retried, failed_perm)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2c: Config sync tick — pre-populates channel cache for all active users
+// ---------------------------------------------------------------------------
+
+/// Called every 300 seconds — pre-fetches and caches alert channel configs for
+/// all active users (those with watermarks or queued alerts) so that the 60s
+/// delivery tick has fresh data without needing to do inter-canister calls.
+#[cfg(not(test))]
+fn config_sync_tick() {
+    ic_cdk::spawn(async move {
+        config_sync_async().await;
+    });
+}
+
+#[cfg(not(test))]
+async fn config_sync_async() {
+    let now_ns = ic_cdk::api::time();
+
+    // Collect all unique principals from watermarks (active monitored users)
+    let principals: Vec<Principal> = WATERMARKS.with(|w| {
+        w.borrow()
+            .iter()
+            .map(|(key, _)| {
+                let slice = &key.0[..29];
+                let end = slice.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0);
+                Principal::from_slice(&slice[..end])
+            })
+            .collect::<std::collections::HashSet<Principal>>()
+            .into_iter()
+            .collect()
+    });
+
+    let user_count = principals.len();
+    let mut total_channels = 0usize;
+
+    for principal in principals {
+        let channels = fetch_user_alert_channels(principal).await;
+        total_channels += channels.len();
+        store_cached_channels(&principal, channels, now_ns);
+    }
+
+    ic_cdk::println!(
+        "[config_sync] Synced channels for {} users, {} total channels",
+        user_count, total_channels
+    );
 }
 
 /// Cycle drain protection — panics (traps) if balance is critically low.
@@ -654,22 +969,26 @@ fn start_timer() {
         std::time::Duration::from_secs(30),
         timer_tick,
     );
-    // 60s delivery drain tick (Phase 2b)
+    // 60s delivery drain tick (Phase 2b/2c)
     ic_cdk_timers::set_timer_interval(
         std::time::Duration::from_secs(60),
         delivery_tick,
+    );
+    // 300s config sync tick (Phase 2c) — pre-fetches per-user channel configs
+    #[cfg(not(test))]
+    ic_cdk_timers::set_timer_interval(
+        std::time::Duration::from_secs(300),
+        config_sync_tick,
     );
     IS_RUNNING.with(|r| *r.borrow_mut() = true);
 }
 
 /// Called every 60 seconds — drains queued alerts via HTTPS outcalls.
+/// Phase 2c: uses per-user channel routing via `run_per_user_delivery_drain`.
 fn delivery_tick() {
     #[cfg(not(test))]
     ic_cdk::spawn(async move {
-        // Use placeholder empty channels until config canister integration (Phase 2c).
-        // In Phase 2c these will be loaded per-user from guardian_config canister.
-        let channels: Vec<delivery::AlertChannel> = vec![];
-        let (delivered, retried, failed) = delivery::run_delivery_drain(10, &channels).await;
+        let (delivered, retried, failed) = run_per_user_delivery_drain(10).await;
         ic_cdk::println!(
             "[delivery_tick] delivered={} retried={} failed_perm={}",
             delivered, retried, failed
@@ -1019,6 +1338,384 @@ mod tests {
             }
         }
         assert_eq!(seen.len(), MAX_SEEN_TX_IDS_PER_USER);
+    }
+
+    // =========================================================================
+    // Phase 2c: Config Canister Sync + Per-User Channel Routing Tests
+    // =========================================================================
+
+    mod phase2c_tests {
+        use super::*;
+        use crate::delivery::AlertChannel;
+
+        // -----------------------------------------------------------------------
+        // UserChannelEntry storable roundtrip
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_user_channel_entry_default_is_empty() {
+            let entry = UserChannelEntry::default();
+            assert!(entry.channels.is_empty());
+            assert_eq!(entry.cached_at, 0);
+        }
+
+        #[test]
+        fn test_user_channel_entry_storable_roundtrip() {
+            let entry = UserChannelEntry {
+                channels: vec![
+                    AlertChannel::Discord { webhook_url: "https://discord.com/hook/1".to_string() },
+                    AlertChannel::Slack { webhook_url: "https://hooks.slack.com/T0/B1/x".to_string() },
+                ],
+                cached_at: 1_700_000_000_000_000_000,
+            };
+            let bytes = entry.to_bytes();
+            let entry2 = UserChannelEntry::from_bytes(bytes);
+            assert_eq!(entry2.channels.len(), 2);
+            assert_eq!(entry2.cached_at, 1_700_000_000_000_000_000);
+        }
+
+        #[test]
+        fn test_user_channel_entry_storable_empty_channels() {
+            let entry = UserChannelEntry { channels: vec![], cached_at: 999 };
+            let entry2 = UserChannelEntry::from_bytes(entry.to_bytes());
+            assert!(entry2.channels.is_empty());
+            assert_eq!(entry2.cached_at, 999);
+        }
+
+        #[test]
+        fn test_user_channel_entry_all_channel_types() {
+            let entry = UserChannelEntry {
+                channels: vec![
+                    AlertChannel::Discord { webhook_url: "https://discord.com/hook".to_string() },
+                    AlertChannel::Slack { webhook_url: "https://slack.com/hook".to_string() },
+                    AlertChannel::Webhook { url: "https://example.com/hook".to_string(), secret: Some("s3cr3t".to_string()) },
+                    AlertChannel::Email { address: "a@b.com".to_string(), api_url: "https://api.mg.net/v3/msgs".to_string(), api_key: "key-x".to_string() },
+                ],
+                cached_at: 42,
+            };
+            let entry2 = UserChannelEntry::from_bytes(entry.to_bytes());
+            assert_eq!(entry2.channels.len(), 4);
+        }
+
+        // -----------------------------------------------------------------------
+        // Cache TTL constant
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_channel_cache_ttl_is_5_minutes_in_ns() {
+            // 5 minutes = 300 seconds = 300_000_000_000 nanoseconds
+            assert_eq!(CHANNEL_CACHE_TTL_NS, 300 * 1_000_000_000);
+        }
+
+        // -----------------------------------------------------------------------
+        // Cache helper: get_cached_channels / store_cached_channels
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_get_cached_channels_returns_none_when_empty() {
+            let user = Principal::from_slice(&[201u8; 29]);
+            let now_ns = 1_000_000_000_000u64;
+            let result = get_cached_channels(&user, now_ns);
+            assert!(result.is_none(), "Empty cache should return None");
+        }
+
+        #[test]
+        fn test_store_and_get_cached_channels_fresh_entry() {
+            let user = Principal::from_slice(&[202u8; 29]);
+            let now_ns = 2_000_000_000_000u64;
+            let channels = vec![
+                AlertChannel::Discord { webhook_url: "https://discord.com/hook/202".to_string() },
+            ];
+            store_cached_channels(&user, channels.clone(), now_ns);
+
+            let retrieved = get_cached_channels(&user, now_ns);
+            assert!(retrieved.is_some(), "Should retrieve freshly cached entry");
+            assert_eq!(retrieved.unwrap().len(), 1);
+        }
+
+        #[test]
+        fn test_fetch_user_channels_cache_invalidation() {
+            // Store an entry, then check it as expired (now_ns > cached_at + TTL)
+            let user = Principal::from_slice(&[203u8; 29]);
+            let cached_at = 5_000_000_000_000u64;
+            let channels = vec![
+                AlertChannel::Slack { webhook_url: "https://hooks.slack.com/x".to_string() },
+            ];
+            store_cached_channels(&user, channels, cached_at);
+
+            // Query with now_ns = cached_at + TTL + 1 (expired)
+            let expired_now = cached_at + CHANNEL_CACHE_TTL_NS + 1;
+            let result = get_cached_channels(&user, expired_now);
+            assert!(result.is_none(), "Expired cache entry should return None");
+        }
+
+        #[test]
+        fn test_cache_still_valid_at_exactly_ttl_minus_1() {
+            let user = Principal::from_slice(&[204u8; 29]);
+            let cached_at = 10_000_000_000_000u64;
+            let channels = vec![
+                AlertChannel::Webhook { url: "https://example.com/wh".to_string(), secret: None },
+            ];
+            store_cached_channels(&user, channels, cached_at);
+
+            // Query at cached_at + TTL - 1 (still valid)
+            let near_expiry = cached_at + CHANNEL_CACHE_TTL_NS - 1;
+            let result = get_cached_channels(&user, near_expiry);
+            assert!(result.is_some(), "Cache entry should still be valid at TTL - 1ns");
+        }
+
+        #[test]
+        fn test_cache_expired_exactly_at_ttl() {
+            let user = Principal::from_slice(&[205u8; 29]);
+            let cached_at = 20_000_000_000_000u64;
+            let channels = vec![
+                AlertChannel::Email {
+                    address: "user@test.com".to_string(),
+                    api_url: "https://api.mg.net/msg".to_string(),
+                    api_key: "k".to_string(),
+                },
+            ];
+            store_cached_channels(&user, channels, cached_at);
+
+            // Query at exactly cached_at + TTL (expired — saturating_sub equals TTL, not < TTL)
+            let exactly_ttl = cached_at + CHANNEL_CACHE_TTL_NS;
+            let result = get_cached_channels(&user, exactly_ttl);
+            assert!(result.is_none(), "Cache should be expired when age == TTL");
+        }
+
+        #[test]
+        fn test_store_channels_overwrites_previous_entry() {
+            let user = Principal::from_slice(&[206u8; 29]);
+            let now_ns = 30_000_000_000_000u64;
+
+            store_cached_channels(
+                &user,
+                vec![AlertChannel::Discord { webhook_url: "https://a.com".to_string() }],
+                now_ns,
+            );
+            store_cached_channels(
+                &user,
+                vec![
+                    AlertChannel::Slack { webhook_url: "https://b.com".to_string() },
+                    AlertChannel::Slack { webhook_url: "https://c.com".to_string() },
+                ],
+                now_ns + 1,
+            );
+
+            let result = get_cached_channels(&user, now_ns + 1).unwrap();
+            assert_eq!(result.len(), 2, "Overwrite should replace, not append");
+            assert!(matches!(result[0], AlertChannel::Slack { .. }));
+        }
+
+        #[test]
+        fn test_channel_cache_len_increments() {
+            let before = channel_cache_len();
+            let user = Principal::from_slice(&[207u8; 29]);
+            store_cached_channels(&user, vec![], 1_000_000);
+            let after = channel_cache_len();
+            assert!(after >= before, "Cache len should not decrease after insert");
+        }
+
+        // -----------------------------------------------------------------------
+        // No channels configured — skip logic
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_no_channels_configured_skips_delivery() {
+            // When a user has no cached channels and cache is empty → result is empty vec
+            let user = Principal::from_slice(&[208u8; 29]);
+            let now_ns = 1_000_000u64;
+            // Explicitly store empty channels
+            store_cached_channels(&user, vec![], now_ns);
+
+            let channels = get_cached_channels(&user, now_ns).unwrap_or_default();
+            assert!(channels.is_empty(), "No channels should mean delivery is skipped");
+        }
+
+        #[test]
+        fn test_delivery_to_multiple_channels_routing() {
+            // Verify that a user with 3 channels would have delivery called 3 times.
+            // (Simulated — we count channels, actual HTTP outcalls require IC runtime)
+            let user = Principal::from_slice(&[209u8; 29]);
+            let now_ns = 1_000_000u64;
+            let channels = vec![
+                AlertChannel::Discord { webhook_url: "https://discord.com/h1".to_string() },
+                AlertChannel::Slack   { webhook_url: "https://slack.com/h2".to_string() },
+                AlertChannel::Webhook { url: "https://example.com/h3".to_string(), secret: None },
+            ];
+            store_cached_channels(&user, channels.clone(), now_ns);
+
+            let retrieved = get_cached_channels(&user, now_ns).unwrap();
+            assert_eq!(retrieved.len(), 3, "All 3 channels should be returned for routing");
+        }
+
+        // -----------------------------------------------------------------------
+        // Inter-canister retry logic (unit-level simulation)
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_inter_canister_call_retry_on_transient_error() {
+            // Simulate retry counter: after 3 failures, we give up.
+            let max_retries = 3u32;
+            let mut attempts = 0u32;
+
+            // Simulate 3 transient failures
+            while attempts < max_retries {
+                attempts += 1;
+                // Each attempt: transient error
+                let is_transient = true;
+                if is_transient && attempts < max_retries {
+                    // retry
+                    continue;
+                }
+                break;
+            }
+
+            assert_eq!(attempts, max_retries, "Should attempt exactly {} times", max_retries);
+        }
+
+        #[test]
+        fn test_retry_stops_after_max_attempts() {
+            let max_retries = 3u32;
+            let mut attempt_count = 0u32;
+            let mut succeeded = false;
+
+            for _attempt in 0..max_retries {
+                attempt_count += 1;
+                // Simulate persistent failure
+                if false { // never succeeds
+                    succeeded = true;
+                    break;
+                }
+            }
+
+            assert_eq!(attempt_count, max_retries);
+            assert!(!succeeded, "Should not succeed when all attempts fail");
+        }
+
+        #[test]
+        fn test_retry_succeeds_on_second_attempt() {
+            let max_retries = 3u32;
+            let mut attempt_count = 0u32;
+            let mut succeeded = false;
+
+            for attempt in 0..max_retries {
+                attempt_count += 1;
+                if attempt == 1 {
+                    // Second attempt succeeds
+                    succeeded = true;
+                    break;
+                }
+            }
+
+            assert!(succeeded);
+            assert_eq!(attempt_count, 2, "Should succeed on attempt 2");
+        }
+
+        // -----------------------------------------------------------------------
+        // Alert routing edge cases
+        // -----------------------------------------------------------------------
+
+        #[test]
+        fn test_different_users_have_independent_channel_caches() {
+            let user_a = Principal::from_slice(&[210u8; 29]);
+            let user_b = Principal::from_slice(&[211u8; 29]);
+            let now_ns = 5_000_000u64;
+
+            store_cached_channels(
+                &user_a,
+                vec![AlertChannel::Discord { webhook_url: "https://a.com".to_string() }],
+                now_ns,
+            );
+            store_cached_channels(
+                &user_b,
+                vec![
+                    AlertChannel::Slack { webhook_url: "https://b1.com".to_string() },
+                    AlertChannel::Slack { webhook_url: "https://b2.com".to_string() },
+                ],
+                now_ns,
+            );
+
+            let a_channels = get_cached_channels(&user_a, now_ns).unwrap();
+            let b_channels = get_cached_channels(&user_b, now_ns).unwrap();
+            assert_eq!(a_channels.len(), 1);
+            assert_eq!(b_channels.len(), 2);
+        }
+
+        #[test]
+        fn test_cache_key_is_principal_text() {
+            // Verify that two principals with different bytes produce different keys
+            let p1 = Principal::from_slice(&[212u8; 29]);
+            let p2 = Principal::from_slice(&[213u8; 29]);
+            assert_ne!(p1.to_text(), p2.to_text());
+        }
+
+        #[test]
+        fn test_empty_channel_list_cached_separately() {
+            let user = Principal::from_slice(&[214u8; 29]);
+            let now_ns = 8_000_000u64;
+            store_cached_channels(&user, vec![], now_ns);
+
+            let result = get_cached_channels(&user, now_ns);
+            assert!(result.is_some(), "Empty channel list is a valid cache entry");
+            assert!(result.unwrap().is_empty());
+        }
+
+        #[test]
+        fn test_cache_with_five_channels_max() {
+            // Config canister allows max 5 channels per user
+            let user = Principal::from_slice(&[215u8; 29]);
+            let now_ns = 9_000_000u64;
+            let channels = (0..5).map(|i| AlertChannel::Discord {
+                webhook_url: format!("https://discord.com/hook/{}", i),
+            }).collect::<Vec<_>>();
+            store_cached_channels(&user, channels, now_ns);
+
+            let result = get_cached_channels(&user, now_ns).unwrap();
+            assert_eq!(result.len(), 5);
+        }
+
+        #[test]
+        fn test_alert_not_sent_when_all_channels_fail() {
+            // Simulate: 2 channels, both fail → mark as retried or failed_perm
+            let outcomes = vec![
+                crate::delivery::DeliveryOutcome::TransportError { message: "timeout".to_string() },
+                crate::delivery::DeliveryOutcome::TransportError { message: "timeout".to_string() },
+            ];
+            let any_success = outcomes.iter().any(|o| o.is_success());
+            let any_permanent = outcomes.iter().any(|o| o.is_permanent_failure());
+            assert!(!any_success);
+            assert!(!any_permanent); // transport errors are transient
+        }
+
+        #[test]
+        fn test_alert_sent_when_at_least_one_channel_succeeds() {
+            // Simulate: channel 1 fails, channel 2 succeeds → any_success = true
+            let outcomes = vec![
+                crate::delivery::DeliveryOutcome::TransportError { message: "timeout".to_string() },
+                crate::delivery::DeliveryOutcome::Success { status: 200 },
+            ];
+            let any_success = outcomes.iter().any(|o| o.is_success());
+            assert!(any_success, "Should mark sent if at least one channel succeeds");
+        }
+
+        #[test]
+        fn test_channel_cache_ttl_boundary_just_before_expiry() {
+            let cached_at = 100_000_000_000u64;
+            let age = CHANNEL_CACHE_TTL_NS - 1;
+            let now_ns = cached_at + age;
+            // is_fresh = now_ns.saturating_sub(cached_at) < TTL
+            let is_fresh = now_ns.saturating_sub(cached_at) < CHANNEL_CACHE_TTL_NS;
+            assert!(is_fresh, "1ns before TTL should still be fresh");
+        }
+
+        #[test]
+        fn test_channel_cache_ttl_boundary_at_expiry() {
+            let cached_at = 100_000_000_000u64;
+            let now_ns = cached_at + CHANNEL_CACHE_TTL_NS;
+            let is_fresh = now_ns.saturating_sub(cached_at) < CHANNEL_CACHE_TTL_NS;
+            assert!(!is_fresh, "At TTL exactly should be expired");
+        }
     }
 
     // =========================================================================

@@ -236,6 +236,27 @@ fn get_config() -> ApiResult<GuardianConfig> {
     })
 }
 
+/// Fetch config for a specific user — callable by the guardian engine (controller only).
+///
+/// Phase 2c: the engine canister calls this to retrieve per-user alert channel
+/// settings for delivery routing.  Only callers that are controllers of this
+/// canister (i.e. the guardian engine or the canister operator) are allowed.
+#[query]
+fn get_config_for_user(user: Principal) -> ApiResult<GuardianConfig> {
+    let caller_p = caller();
+    if !ic_cdk::api::is_controller(&caller_p) {
+        return ApiResult::Err(
+            "Unauthorized: only controllers can fetch configs for other users".to_string(),
+        );
+    }
+    CONFIGS.with(|configs| {
+        match configs.borrow().get(&user) {
+            Some(config) => ApiResult::Ok(config),
+            None => ApiResult::Err(format!("No config found for user {}", user)),
+        }
+    })
+}
+
 /// Get detailed health status including cycle monitoring
 #[query]
 fn health() -> ApiResult<HealthStatus> {
