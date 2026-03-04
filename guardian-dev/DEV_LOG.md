@@ -1,5 +1,96 @@
 # Guardian-Dev Log
 
+## Phase 2b: Alert Delivery via HTTPS Outcall — 2026-03-04
+
+### Session: guardian-phase2b (Subagent)
+**Time**: 2026-03-04 19:30 PST  
+**Duration**: ~45 minutes  
+**Status**: ✅ COMPLETE
+
+---
+
+### What Was Implemented
+
+#### New Module: `src/guardian_engine/src/delivery.rs`
+
+Full HTTPS outcall delivery engine for Guardian alerts.
+
+**Features:**
+- `AlertChannel` enum: `Discord { webhook_url }`, `Slack { webhook_url }`, `Webhook { url, secret }`, `Email { address, api_url, api_key }`
+- `AlertChannel::from_str_config()`: parses semicolon-delimited config strings into typed channels
+- Payload builders for each channel type:
+  - `build_discord_payload()` — Discord embed JSON with color-coded severity
+  - `build_slack_payload()` — Slack Block Kit text with emoji severity indicators
+  - `build_webhook_payload()` — Generic JSON with all alert fields
+  - `build_email_payload()` — URL-encoded form body (Mailgun/SendGrid compatible)
+- `DeliveryOutcome` enum: `Success`, `HttpError`, `TransportError`, `InsufficientCycles`, `InvalidConfig`
+- `estimate_outcall_cycles(request_bytes, max_response_bytes) -> u128` — IC cost formula
+- `deliver_to_channel()` async (non-test): makes real HTTPS outcall via IC management canister
+- `run_delivery_drain(max_items, channels)`: drains alert queue, retries on transient failure, marks Sent/Failed in stable ALERTS map
+- `transform_response()`: deterministic HTTP response transform (strips headers)
+- `escape_json()` and `url_encode()` helpers
+- Retry policy: max 3 attempts; 4xx/invalid config = permanent failure; 5xx/transport = retry
+
+#### `AlertQueueItem` enriched (alert_queue.rs)
+Added fields: `severity`, `severity_score`, `rules_triggered`, `events_summary`, `recommended_action`
+
+#### `lib.rs` changes
+- Added `pub mod delivery`
+- Updated enqueue call to populate new `AlertQueueItem` fields
+- Added 60s `delivery_tick()` timer (separate from 30s monitoring tick)
+- Added `get_alert_queue_len()` query endpoint
+
+#### `fetcher.rs` — pre-existing clippy fixes
+- Fixed `redundant_closure` warnings on `filter_map` calls
+
+---
+
+### Test Results
+
+| Metric | Before Phase 2b | After Phase 2b |
+|--------|----------------|----------------|
+| Tests  | 189            | 237            |
+| Delivery tests | 0       | 48             |
+| Clippy warnings | 2     | 0              |
+| Failures | 0            | 0              |
+
+---
+
+### Cycle Cost Model (per outcall)
+- Base fee: 49,140,000 cycles
+- Request bytes: 5,200 cycles/byte
+- Response bytes: 10,400 cycles/byte
+- Typical webhook (~1KB req, 2KB resp): ~70M cycles
+- Budget: 100M cycles per attempt (2x safety margin)
+
+---
+
+### Commit
+`e58ab93` — feat: Phase 2b — Alert delivery via HTTPS outcall (Discord, Slack, webhook, email)
+
+---
+
+### Known Phase 2b Limitations
+
+1. **Channels are currently empty** in `delivery_tick()` — will be populated from config canister in Phase 2c
+2. **Email auth**: uses basic base64 encoding; production should use proper Mailgun SDK
+3. **No HMAC signing** for webhook secret (uses plain header); production should sign with HMAC-SHA256
+4. **No per-user channel routing**: all users share the same channels list (Phase 2c will load per-user configs)
+
+---
+
+### Next Steps (Phase 2c)
+
+- [ ] Engine polls config canister for per-user alert channel settings
+- [ ] Route alerts to each user's configured channels
+- [ ] Testnet deployment with real cycles
+
+---
+
+**Guardian-Dev Status**: 🟢 Ready for Phase 2c
+
+
+
 ## Phase 2a: Testnet Deployment — 2026-03-04
 
 ### Session: guardian-phase2a (Subagent)

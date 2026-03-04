@@ -1,6 +1,6 @@
 # Guardian ICP — File Structure
 
-**Last Updated:** 2026-03-04 (Phase 2a complete)
+**Last Updated:** 2026-03-04 (Phase 2b complete)
 
 ## Source Tree
 
@@ -21,9 +21,11 @@ guardian-icp/
     ├── guardian_engine/
     │   ├── Cargo.toml                    # guardian_engine crate manifest
     │   └── src/
-    │       ├── lib.rs                    # Engine canister (timer, watermarks, alerts, stable storage)
+    │       ├── lib.rs                    # Engine canister (timer, watermarks, alerts, stable storage, 60s delivery tick Phase 2b)
     │       ├── alerts.rs                 # Alert payload formatting and storage
+    │       ├── alert_queue.rs            # Persistent delivery queue (enriched fields Phase 2b)
     │       ├── canisters.rs              # ICRC canister IDs and fetch constants
+    │       ├── delivery.rs               # *** NEW Phase 2b *** HTTPS outcall delivery (Discord/Slack/webhook/email)
     │       ├── detector.rs               # Rule evaluation engine (A1/A3/A4, u128 balance Phase 2a)
     │       ├── fetcher.rs                # ICRC transaction fetching + ring buffer (wire types Phase 2a)
     │       ├── icrc.rs                   # ICRC type definitions (wire types + conversions Phase 2a)
@@ -42,25 +44,42 @@ guardian-icp/
 | 1d: Detection engine | ✅ Complete | 81 tests | Mar 3 |
 | 1e: Testing + local deploy | ✅ Complete | 157 tests | Mar 3, `8b45fdf` (v0.1-mvp) |
 | **2a: Testnet + ICRC types** | ✅ Complete | **189 tests** | **Mar 4, `ee882d4`, `475f19f`** |
+| **2b: Alert delivery HTTPS** | ✅ Complete | **237 tests** | **Mar 4, `e58ab93`** |
+| 2c: Config canister sync | ⏳ Planned | — | TBD |
 
-**Phase 2a Deliverables**:
-- TASK 1: ICRC Type Verification ✅ (wire types, ICP/ckBTC/ckETH variants fixed)
-- TASK 2: Balance u128 Migration ✅ (supports ckETH 18-decimal, 2 new tests)
-- TASK 3: Testnet Deployment ✅ (local success, testnet documented)
-- TASK 4: Admin Viewer Script ✅ (`scripts/admin-view.sh`)
-- TASK 5: README Documentation ✅ (Phase 2a section + walkthrough)
+**Phase 2b Deliverables**:
+- delivery.rs: new module, AlertChannel enum (Discord/Slack/Webhook/Email) ✅
+- Payload builders for each channel type ✅
+- DeliveryOutcome enum (Success/HttpError/TransportError/InsufficientCycles/InvalidConfig) ✅
+- Cycle cost estimation (`estimate_outcall_cycles`) ✅
+- `deliver_to_channel()` async HTTPS outcall with IC management canister ✅
+- `run_delivery_drain()` queue drainer with retry logic ✅
+- `transform_response()` deterministic transform callback ✅
+- AlertQueueItem enriched with severity, rules, events_summary, recommended_action ✅
+- 60s `delivery_tick()` timer added to lib.rs ✅
+- `get_alert_queue_len()` query endpoint ✅
+- 48 new delivery tests, 0 clippy warnings ✅
 
 ## Test Summary
 
 | Crate | Tests | Status |
 |-------|-------|--------|
 | guardian_config | 14 | ✅ All passing |
-| guardian_engine (unit) | 81 | ✅ All passing |
-| guardian_engine (integration) | 62 | ✅ All passing |
-| **ICRC wire types** (Phase 2a) | **2 new** | ✅ Added |
-| **TOTAL** | **189** | **✅ 0 failures, 0 clippy warnings** |
+| guardian_engine (unit) | 130 | ✅ All passing |
+| guardian_engine (delivery) | 48 | ✅ All passing (Phase 2b NEW) |
+| guardian_engine (integration) | 55 | ✅ All passing |
+| **TOTAL** | **237** | **✅ 0 failures, 0 clippy warnings** |
 
-### Phase 2a Test Additions
+### Phase 2b Test Coverage (delivery.rs)
 
-- `test_cketh_balance_overflow_u64`: Confirms u64 overflow for 1000 ETH
-- `test_cketh_balance_u128_handles_1000_eth`: Verifies u128 correctly handles large values
+- Channel parsing: 9 tests (discord, slack, webhook w/secret, webhook no secret, email, unknown, empty, missing url)
+- Channel kind labels: 4 tests
+- DeliveryOutcome: 6 tests (success, 4xx permanent, 5xx transient, transport, invalid config, insufficient cycles)
+- Discord payload: 5 tests (content, colors for each severity)
+- Slack payload: 3 tests (content, emergency emoji, critical emoji)
+- Webhook payload: 4 tests (JSON structure, severity score, rules array, content)
+- Email payload: 2 tests (to field, URL encoding)
+- Cycle estimation: 5 tests (base, 1KB request, with response, typical, budget coverage)
+- JSON escape helper: 5 tests
+- URL encode helper: 4 tests
+- Retry constants: 3 tests

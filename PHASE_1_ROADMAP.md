@@ -551,4 +551,15 @@ Based on Month 1 outcomes:
 
 - **Created:** Feb 27, 2026 (Strategy-Planner subagent)
 - **Approval:** Moises (subject to revision based on Day 1-2 feedback)
-- **Last updated:** Feb 27, 2026
+- **Last updated:** Mar 4, 2026
+
+---
+
+## OISY Guardian Progress (tracked separately — ref: GUARDIAN_LAUNCH.md)
+
+| Phase | Status | Date |
+|-------|--------|------|
+| Phase 1 MVP (1a-1e) | ✅ Complete | Mar 3, 2026 |
+| Phase 2a: Testnet + ICRC types | ✅ Complete | Mar 4, 2026 |
+| Phase 2b: Alert delivery (HTTPS outcalls) | ✅ Complete | Mar 4, 2026 |
+| Phase 2c: Config canister integration | ⏳ Planned | TBD |

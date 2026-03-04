@@ -1,9 +1,10 @@
 # Guardian Phase 1 Launch — Status Report
 
-**Date:** Mar 3, 2026  
-**Status:** ✅ PHASE 1 MVP COMPLETE  
+**Date:** Mar 4, 2026 (updated)  
+**Status:** 🟡 PHASE 2b COMPLETE — Phase 2c in progress  
 **Agent:** Guardian-Dev  
-**Completion:** Mar 3, 2026 (ahead of Apr 1 target)
+**Current Completion:** 70% (Phase 2b done)  
+**Next Milestone:** Phase 2c — Config canister integration (per-user alert channels)
 
 ---
 
@@ -72,11 +73,19 @@ guardian_config  ←→  guardian_engine
 
 ---
 
-## Next Steps (Phase 2 — Future)
+## Phase 2 Status
 
-1. **HTTPS Outcalls** — Send alerts via webhook/Telegram (placeholder in code)
-2. **OISY Integration** — Deep link with OISY wallet UI
-3. **Mainnet Deployment** — Deploy to IC with cycles funding
+| Phase | Status | Completion | Key Deliverable |
+|-------|--------|------------|-----------------|
+| 2a    | ✅ Done | Mar 4 AM   | ICRC type fixes, u128 balance, testnet deploy, admin script |
+| 2b    | ✅ Done | Mar 4 PM   | HTTPS outcall delivery (Discord/Slack/webhook/email, 237 tests) |
+| 2c    | ⏳ Planned | TBD     | Config canister integration (per-user channels), testnet cycles |
+
+## Next Steps (Phase 2c)
+
+1. **Config canister sync** — Engine polls guardian_config for per-user alert_channels
+2. **Per-user routing** — Route each alert to that user's configured channels
+3. **Testnet deployment** — Deploy with real cycles via `dfx cycles convert`
 4. **Additional Rules** — A2 (daily outflow), A5 (cross-chain anomaly)
 5. **Alert Dashboard** — Frontend for viewing/managing alerts
 
