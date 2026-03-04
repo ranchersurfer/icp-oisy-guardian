@@ -1,5 +1,56 @@
 # Guardian Dev Log
 
+## 2026-03-04 — Phase 1d: Detection Engine (Complete)
+
+### Status: ✅ Phase 1d Deliverables Met
+### Tests: 182 total (33 detector-specific tests) | WASM build: clean | Progress: 80%
+
+### What Was Implemented
+All detection rules were already in place from prior phases. Phase 1d verification confirmed:
+
+**detector.rs — Rules:**
+- `rule_a1_large_transfer()` — triggers when any single outgoing tx > 50% of balance (weight=7=CRITICAL)
+- `rule_a3_rapid_transactions()` — triggers when >5 outgoing txs in any 10-minute sliding window (weight=3=WARN)
+- `rule_a4_new_address()` — triggers when outgoing tx destination not in allowlist (weight=1=INFO)
+- `rule_a2_known_scam_address()` — Phase 3 stub, returns None
+- `evaluate()` — orchestrates all rules, sums severity, filters by alert_threshold (default 7)
+
+**Severity Scoring:**
+- INFO=1, WARN=3, CRITICAL=7, EMERGENCY=15
+- Score = Σ(rule weights for triggered rules)
+- `should_alert = score >= alert_threshold`
+
+**Alert Payload (alerts.rs):**
+- `format_alert()` — builds AlertPayload with alert_id, timestamp, user, severity, severity_score, rules_triggered, events_summary, recommended_action
+
+**detector.rs — DetectionContext:**
+- Uses `balance_e8s` (actual from icrc1_balance_of) when available, falls back to `estimated_balance_e8s`
+
+### Tests (33 detector-specific)
+- A1 rule: 7 tests (detected, small ignored, 50% boundary, 51% trigger, zero balance, incoming ignored, weight=7)
+- A3 rule: 6 tests (5 txs not triggered, 6 txs triggered, outside window, weight=3, empty events, incoming ignored)
+- A4 rule: 5 tests (known address, unknown address, weight=1, incoming ignored, empty events)
+- Scoring: 3 tests (A1 only=7, A3 only=3, A1+A3=10)
+- Threshold: 3 tests (at threshold, below threshold, no rules)
+- Severity enum: 4 tests (INFO, WARN, CRITICAL, EMERGENCY)
+- Alert payload: 2 tests (fields populated, no events summary)
+- Edge cases: 3 tests (empty events, 4 txs, all three rules = score 11)
+
+### Acceptance Criteria
+- ✅ All rules implemented and tested
+- ✅ 182 tests pass (100%)
+- ✅ WASM build: clean (`Finished release profile [optimized] target(s)`)
+- ✅ Clippy: warnings only (lifetime elision), no errors
+- ✅ Score calculation correct (A1+A3+A4 = 7+3+1 = 11)
+- ✅ Alert threshold filtering: score >= threshold → should_alert
+
+### Files
+- `src/guardian_engine/src/detector.rs` — rules, severity, evaluate()
+- `src/guardian_engine/src/alerts.rs` — AlertPayload, format_alert()
+- `src/guardian_engine/src/lib.rs` — detector_tests module (33 tests)
+
+---
+
 ## 2026-03-04 — Phase 1c: ICRC Index Integration (Complete)
 
 ### Status: ✅ Phase 1c Deliverables Met

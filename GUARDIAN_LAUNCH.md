@@ -16,7 +16,7 @@ All 5 phases of Guardian Phase 1 MVP have been completed ahead of schedule.
 | 1a    | ✅ Done | Mar 2      | Config hardening (rate limiting, validation, cycle monitoring) |
 | 1b    | ✅ Done | Mar 2      | Engine skeleton (timer, stable storage, health endpoint) |
 | 1c    | ✅ Done | Mar 3      | ICRC integration (ICP/ckBTC/ckETH fetching, 48 tests) |
-| 1d    | ✅ Done | Mar 3      | Detection engine (rules A1/A3/A4, alert scoring, 81 tests) |
+| 1d    | ✅ Done | Mar 4      | Detection engine (rules A1/A3/A4, severity scoring, 33 detector tests, 182 total) |
 | 1e    | ✅ Done | Mar 3      | Testing, local deployment, docs (157 tests, v0.1-mvp tagged) |
 
 ---

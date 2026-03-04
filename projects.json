@@ -4,7 +4,7 @@
     "name": "OISY Guardian MVP",
     "description": "Wallet safety and transaction guardian for ICP. Phase 1 covers local devnet: Config Canister, rule validation engine, mock OISY integration, audit logging.",
     "status": "active",
-    "progress": 60,
+    "progress": 80,
     "owner_agent_id": "guardian-dev",
     "created_at": "2026-03-02T00:00:00Z",
     "updated_at": "2026-03-04T17:45:00Z",
