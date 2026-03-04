@@ -1,6 +1,8 @@
-/// ICP Ledger Index canister (mainnet).
+/// ICP Index canister (mainnet).
 /// Provides ICRC-1 transaction history for the ICP token.
-pub const ICP_INDEX_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+/// Note: This is the ICP *Index* canister (qhbym-qaaaa-aaaaa-aaafq-cai),
+/// NOT the ICP Ledger (ryjl3-tyaaa-aaaaa-aaaba-cai).
+pub const ICP_INDEX_CANISTER_ID: &str = "qhbym-qaaaa-aaaaa-aaafq-cai";
 
 /// ckBTC Index canister (mainnet).
 /// Provides ICRC-1 transaction history for chain-key Bitcoin.
@@ -16,6 +18,9 @@ pub const MAX_RESULTS_PER_FETCH: u64 = 100;
 /// Maximum events stored per user in the ring buffer.
 pub const MAX_EVENTS_PER_USER: usize = 100;
 
+/// Maximum seen tx IDs stored per user for deduplication.
+pub const MAX_SEEN_TX_IDS_PER_USER: usize = 1000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -25,6 +30,17 @@ mod tests {
     fn test_icp_index_canister_id_valid() {
         let result = Principal::from_text(ICP_INDEX_CANISTER_ID);
         assert!(result.is_ok(), "ICP_INDEX_CANISTER_ID should be a valid principal");
+    }
+
+    #[test]
+    fn test_icp_index_canister_id_is_index_not_ledger() {
+        // The ledger is ryjl3-tyaaa-aaaaa-aaaba-cai — make sure we're not using it
+        assert_ne!(
+            ICP_INDEX_CANISTER_ID, "ryjl3-tyaaa-aaaaa-aaaba-cai",
+            "ICP_INDEX_CANISTER_ID must be the Index canister, not the Ledger"
+        );
+        // Correct index canister
+        assert_eq!(ICP_INDEX_CANISTER_ID, "qhbym-qaaaa-aaaaa-aaafq-cai");
     }
 
     #[test]
@@ -55,5 +71,10 @@ mod tests {
     #[test]
     fn test_max_events_per_user_is_100() {
         assert_eq!(MAX_EVENTS_PER_USER, 100);
+    }
+
+    #[test]
+    fn test_max_seen_tx_ids_per_user_is_1000() {
+        assert_eq!(MAX_SEEN_TX_IDS_PER_USER, 1000);
     }
 }

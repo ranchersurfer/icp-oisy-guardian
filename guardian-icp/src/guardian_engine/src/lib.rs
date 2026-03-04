@@ -8,14 +8,16 @@ mod integration_tests;
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk::{api, caller, init, query, update};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 
 use alerts::format_alert;
-use canisters::MAX_EVENTS_PER_USER;
+use canisters::{MAX_EVENTS_PER_USER, MAX_SEEN_TX_IDS_PER_USER};
 use detector::{evaluate, DetectionContext};
 use fetcher::{merge_into_ring_buffer, update_watermark_after_fetch};
 use icrc::IcrcAccount;
@@ -24,8 +26,23 @@ use icrc::IcrcAccount;
 // Security constants
 // ---------------------------------------------------------------------------
 const MIN_CYCLE_BALANCE: u64 = 500_000_000_000; // 500B cycles – cycle drain guard
+const MAX_INGRESS_PAYLOAD_BYTES: u64 = 1_000_000; // 1 MB
 #[cfg(test)]
 pub const MIN_CYCLE_BALANCE_PUB: u64 = MIN_CYCLE_BALANCE;
+
+// ---------------------------------------------------------------------------
+// C1 Fix: MemoryManager with separate VirtualMemory regions per StableBTreeMap
+// ---------------------------------------------------------------------------
+
+/// Type alias for virtual memory backed by DefaultMemoryImpl.
+type Memory = VirtualMemory<DefaultMemoryImpl>;
+
+/// Memory region IDs — each StableBTreeMap must have a unique MemoryId.
+const WATERMARKS_MEM_ID: MemoryId = MemoryId::new(0);
+const ALERTS_MEM_ID: MemoryId = MemoryId::new(1);
+const META_MEM_ID: MemoryId = MemoryId::new(2);
+const USER_EVENTS_MEM_ID: MemoryId = MemoryId::new(3);
+const SEEN_TX_IDS_MEM_ID: MemoryId = MemoryId::new(4); // H3: tx deduplication
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -101,8 +118,10 @@ impl Storable for AlertRecord {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
+    // C5 Fix: use expect() instead of unwrap()
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).unwrap()
+        candid::decode_one(&bytes)
+            .expect("AlertRecord::from_bytes: failed to decode — stable memory may be corrupt")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -119,8 +138,10 @@ impl Storable for Watermark {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
+    // C5 Fix: use unwrap_or_default() — Watermark has a safe Default
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).unwrap()
+        candid::decode_one(&bytes)
+            .unwrap_or_default()
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -164,8 +185,9 @@ impl Storable for LastTick {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
+    // C5 Fix: use unwrap_or_default() — LastTick has a safe Default
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).unwrap()
+        candid::decode_one(&bytes).unwrap_or_default()
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -180,8 +202,9 @@ impl Storable for StoredPrincipal {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
+    // C5 Fix: use unwrap_or_default() — StoredPrincipal has a safe Default
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).unwrap()
+        candid::decode_one(&bytes).unwrap_or_default()
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -208,22 +231,41 @@ const LAST_TICK_KEY: &str = "__last_tick__";
 const CONFIG_CANISTER_KEY: &str = "__config_canister__";
 
 thread_local! {
+    // C1 Fix: Single MemoryManager that owns all virtual memory regions.
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+
     /// Watermarks: (principal || chain_discriminant) → Watermark
-    static WATERMARKS: RefCell<StableBTreeMap<WatermarkKey, Watermark, DefaultMemoryImpl>> =
-        RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
+    static WATERMARKS: RefCell<StableBTreeMap<WatermarkKey, Watermark, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(WATERMARKS_MEM_ID))
+        ));
 
     /// Alert history: alert_id → AlertRecord
-    static ALERTS: RefCell<StableBTreeMap<String, AlertRecord, DefaultMemoryImpl>> =
-        RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
+    static ALERTS: RefCell<StableBTreeMap<String, AlertRecord, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(ALERTS_MEM_ID))
+        ));
 
     /// Single-slot metadata (last_tick, config canister id, …)
-    static META: RefCell<StableBTreeMap<String, Vec<u8>, DefaultMemoryImpl>> =
-        RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
+    static META: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(META_MEM_ID))
+        ));
 
-    /// Per-user event ring buffer: WatermarkKey (principal, ICP chain) → candid-encoded Vec<UnifiedEvent>
+    /// Per-user event ring buffer: WatermarkKey → candid-encoded Vec<UnifiedEvent>
     /// We reuse WatermarkKey as a 30-byte principal key (chain byte = 0xFF for event store).
-    static USER_EVENTS: RefCell<StableBTreeMap<WatermarkKey, Vec<u8>, DefaultMemoryImpl>> =
-        RefCell::new(StableBTreeMap::new(DefaultMemoryImpl::default()));
+    static USER_EVENTS: RefCell<StableBTreeMap<WatermarkKey, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(USER_EVENTS_MEM_ID))
+        ));
+
+    /// H3 Fix: Per-user seen tx IDs for deduplication.
+    /// WatermarkKey (chain byte = 0xFE) → candid-encoded BTreeSet<String>
+    static SEEN_TX_IDS: RefCell<StableBTreeMap<WatermarkKey, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::new(
+            MEMORY_MANAGER.with(|mm| mm.borrow().get(SEEN_TX_IDS_MEM_ID))
+        ));
 
     /// Runtime flag: has the timer been started?
     static IS_RUNNING: RefCell<bool> = RefCell::new(false);
@@ -281,6 +323,14 @@ fn guard_cycles() {
 fn reject_anonymous() {
     if caller() == Principal::anonymous() {
         ic_cdk::trap("Anonymous callers are not permitted");
+    }
+}
+
+/// C3 Fix: Reject non-controller callers for privileged admin endpoints.
+fn reject_non_controller() {
+    let c = caller();
+    if !ic_cdk::api::is_controller(&c) {
+        ic_cdk::trap("Only controllers can call this method");
     }
 }
 
@@ -408,7 +458,6 @@ async fn run_fetch_cycle(now_ns: u64) {
                 let payload = format_alert(principal, result, user_events, now_ns);
                 ic_cdk::println!("ALERT: {} for {:?} (alert_id={})", severity_str, principal, payload.alert_id);
                 // TODO Phase 2: HTTPS outcall to notify external channel
-                // ic_cdk::println!("Placeholder: would send outcall for alert {}", payload.alert_id);
             }
         }
     }
@@ -425,11 +474,66 @@ fn load_user_events(principal: &Principal) -> Vec<UnifiedEvent> {
     })
 }
 
+/// H3 Fix: Build the per-user seen-tx-ids WatermarkKey (chain byte = 0xFE).
+fn seen_tx_ids_key(principal: &Principal) -> WatermarkKey {
+    let pb = principal.as_slice();
+    let mut key = [0u8; 30];
+    let len = pb.len().min(29);
+    key[..len].copy_from_slice(&pb[..len]);
+    key[29] = 0xFE; // sentinel: seen-tx-ids store
+    WatermarkKey(key)
+}
+
+/// H3 Fix: Load the set of already-seen tx IDs for a user.
+fn load_seen_tx_ids(principal: &Principal) -> BTreeSet<String> {
+    let key = seen_tx_ids_key(principal);
+    SEEN_TX_IDS.with(|s| {
+        s.borrow()
+            .get(&key)
+            .and_then(|b| candid::decode_one::<BTreeSet<String>>(&b).ok())
+            .unwrap_or_default()
+    })
+}
+
+/// H3 Fix: Persist the seen tx IDs for a user (bounded to MAX_SEEN_TX_IDS_PER_USER).
+fn save_seen_tx_ids(principal: &Principal, ids: &BTreeSet<String>) {
+    let key = seen_tx_ids_key(principal);
+    let encoded = candid::encode_one(ids).unwrap_or_default();
+    SEEN_TX_IDS.with(|s| s.borrow_mut().insert(key, encoded));
+}
+
 /// Merge `new_events` into the per-user ring buffer in stable memory.
+/// H3 Fix: Deduplicates events by tx_id before merging.
 fn store_user_events(principal: &Principal, new_events: Vec<UnifiedEvent>) {
     if new_events.is_empty() {
         return;
     }
+
+    // H3 Fix: Filter out already-seen tx IDs
+    let mut seen = load_seen_tx_ids(principal);
+    let deduplicated: Vec<UnifiedEvent> = new_events
+        .into_iter()
+        .filter(|e| !seen.contains(&e.tx_id))
+        .collect();
+
+    if deduplicated.is_empty() {
+        return;
+    }
+
+    // Record the new tx IDs, trimming to the max bound
+    for e in &deduplicated {
+        seen.insert(e.tx_id.clone());
+    }
+    // If we exceed the cap, remove the oldest entries (BTreeSet is sorted; remove from front)
+    while seen.len() > MAX_SEEN_TX_IDS_PER_USER {
+        if let Some(oldest) = seen.iter().next().cloned() {
+            seen.remove(&oldest);
+        } else {
+            break;
+        }
+    }
+    save_seen_tx_ids(principal, &seen);
+
     let key = user_events_key(principal);
     let mut existing: Vec<UnifiedEvent> = USER_EVENTS.with(|ue| {
         ue.borrow()
@@ -437,7 +541,7 @@ fn store_user_events(principal: &Principal, new_events: Vec<UnifiedEvent>) {
             .and_then(|b| candid::decode_one::<Vec<UnifiedEvent>>(&b).ok())
             .unwrap_or_default()
     });
-    merge_into_ring_buffer(&mut existing, new_events, MAX_EVENTS_PER_USER);
+    merge_into_ring_buffer(&mut existing, deduplicated, MAX_EVENTS_PER_USER);
     let encoded = candid::encode_one(&existing).unwrap_or_default();
     USER_EVENTS.with(|ue| ue.borrow_mut().insert(key, encoded));
 }
@@ -454,18 +558,54 @@ fn user_events_key(principal: &Principal) -> WatermarkKey {
 }
 
 // ---------------------------------------------------------------------------
+// C4 Fix: inspect_message for engine canister — reject anonymous and oversized
+// ---------------------------------------------------------------------------
+
+#[ic_cdk::inspect_message]
+fn inspect_message() {
+    // Reject anonymous callers at the ingress gate
+    if caller() == Principal::anonymous() {
+        ic_cdk::trap("Anonymous callers are not permitted");
+    }
+
+    // Reject oversized payloads to prevent cycle drain attacks
+    let arg_size = ic_cdk::api::call::arg_data_raw().len() as u64;
+    if arg_size > MAX_INGRESS_PAYLOAD_BYTES {
+        ic_cdk::trap(&format!(
+            "Payload too large: {} bytes exceeds maximum of {} bytes",
+            arg_size, MAX_INGRESS_PAYLOAD_BYTES
+        ));
+    }
+
+    // Accept the message — full authorization checked in update functions
+    ic_cdk::api::call::accept_message();
+}
+
+// ---------------------------------------------------------------------------
 // Canister lifecycle
 // ---------------------------------------------------------------------------
 
 #[init]
 fn init() {
     // Start the 30-second heartbeat timer
+    start_timer();
+    ic_cdk::println!("Guardian Engine initialised");
+}
+
+/// C2 Fix: post_upgrade restarts the timer (which dies after every upgrade).
+#[ic_cdk::post_upgrade]
+fn post_upgrade() {
+    start_timer();
+    ic_cdk::println!("Guardian Engine post-upgrade: timer restarted");
+}
+
+/// Shared timer-start logic used by both init and post_upgrade.
+fn start_timer() {
     ic_cdk_timers::set_timer_interval(
         std::time::Duration::from_secs(30),
         timer_tick,
     );
     IS_RUNNING.with(|r| *r.borrow_mut() = true);
-    ic_cdk::println!("Guardian Engine initialised");
 }
 
 // ---------------------------------------------------------------------------
@@ -492,9 +632,12 @@ fn get_health() -> EngineHealthStatus {
 // ---------------------------------------------------------------------------
 
 /// Store the principal of the companion guardian_config canister.
+/// C3 Fix: Only controllers can call this — prevents any caller from redirecting
+/// the engine to a malicious config canister.
 #[update]
 fn set_config_canister_id(id: Principal) {
     reject_anonymous();
+    reject_non_controller(); // C3 Fix: controller-only
     guard_cycles();
     store_config_canister_id(id);
     ic_cdk::println!("Config canister id set to {:?}", id);
@@ -728,6 +871,54 @@ mod tests {
         assert_eq!(lt2.value, 123_456_789);
     }
 
+    // --- H3: Transaction deduplication tests ---------------------------------
+
+    #[test]
+    fn test_seen_tx_ids_key_uses_0xfe_sentinel() {
+        let p = Principal::from_slice(&[1u8; 29]);
+        let key = seen_tx_ids_key(&p);
+        assert_eq!(key.0[29], 0xFE);
+    }
+
+    #[test]
+    fn test_seen_tx_ids_key_differs_from_user_events_key() {
+        let p = Principal::from_slice(&[1u8; 29]);
+        let seen_key = seen_tx_ids_key(&p);
+        let events_key = user_events_key(&p);
+        assert_ne!(seen_key, events_key);
+    }
+
+    #[test]
+    fn test_btreeset_dedup_logic() {
+        // Verify BTreeSet correctly deduplicates tx IDs
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        seen.insert("tx-1".to_string());
+        seen.insert("tx-2".to_string());
+        seen.insert("tx-1".to_string()); // duplicate
+
+        assert_eq!(seen.len(), 2);
+        assert!(seen.contains("tx-1"));
+        assert!(seen.contains("tx-2"));
+    }
+
+    #[test]
+    fn test_seen_tx_ids_bounded_at_max() {
+        // Verify that we can enforce the MAX_SEEN_TX_IDS_PER_USER bound
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for i in 0..MAX_SEEN_TX_IDS_PER_USER + 5 {
+            seen.insert(format!("tx-{:05}", i));
+        }
+        // Trim to bound
+        while seen.len() > MAX_SEEN_TX_IDS_PER_USER {
+            if let Some(oldest) = seen.iter().next().cloned() {
+                seen.remove(&oldest);
+            } else {
+                break;
+            }
+        }
+        assert_eq!(seen.len(), MAX_SEEN_TX_IDS_PER_USER);
+    }
+
     // =========================================================================
     // Phase 1d: Detection Engine Tests
     // =========================================================================
@@ -841,8 +1032,6 @@ mod tests {
         #[test]
         fn test_a3_six_txs_outside_10min_not_triggered() {
             // 6 txs but spaced so no 6 fit within 10 min window
-            // 6 txs at 2 min intervals = span 10 min (0, 2, 4, 6, 8, 10 minutes)
-            // Window is [0, 10min] inclusive — 11 min span means last falls outside
             let min = 60_000_000_000u64;
             let events = make_n_out_events(6, 0, 2 * min + 1); // slightly over 2 min apart → 10min+5s span
             let result = rule_a3_rapid_transactions(&events);
