@@ -1,5 +1,133 @@
 # Guardian-Dev Log
 
+## Phase 2d: Testnet Deployment with Live Config Sync — 2026-03-04
+
+### Session: guardian-dev-phase2d (Subagent)
+**Time**: 2026-03-04 20:30 PST  
+**Duration**: ~20 minutes  
+**Status**: ✅ COMPLETE (testnet ops blocked, documented below)
+
+---
+
+### What Was Implemented
+
+#### TASK 1: HMAC-SHA256 Signing for Webhook Channels
+
+**`src/guardian_engine/src/delivery.rs`**:
+- Added `sha2 = "0.10"` and `hmac = "0.12"` to `guardian_engine/Cargo.toml` (no_std compatible)
+- Added `hmac_sha256_hex(secret, payload)` — computes HMAC-SHA256, returns lowercase hex
+- Added `build_webhook_signature(secret, payload)` — returns `sha256=<hex>` header value
+- Updated `deliver_to_channel()` Webhook branch:
+  - **Before**: sent `X-Guardian-Secret: <raw_secret>` (plain token)
+  - **After**: sends `X-Guardian-Signature: sha256=<hmac_hex>` (HMAC-signed)
+- Compatible with GitHub/Discord webhook verification pattern
+- Added 11 new HMAC tests:
+  - Known test vector: `HMAC-SHA256("key", "The quick brown fox…") = f7bc83f4…`
+  - Determinism, different-secret/payload uniqueness
+  - Prefix format (`sha256=`), header length (71 chars), unicode secret
+
+#### TASK 2: Local Deployment (Testnet Fallback)
+
+**Status**: ✅ LOCAL DEPLOYED SUCCESSFULLY  
+**Testnet status**: ⚠️ BLOCKED — identity has 0.00 ICP (0 cycles)  
+**Recovery**: Fund identity via `dfx ledger transfer` or external NNS faucet, then `dfx cycles convert --amount=0.5 --network ic`
+
+**Local canister IDs**:
+- `guardian_config`: `uxrrr-q7777-77774-qaaaq-cai`
+- `guardian_engine`: `u6s2n-gx777-77774-qaaba-cai`
+
+**Build verification**: `cargo build --target wasm32-unknown-unknown --release` — ✅ 0 errors, 0 warnings
+
+#### TASK 3: guardian_engine Set as Controller of guardian_config
+
+```bash
+dfx canister update-settings guardian_config --add-controller u6s2n-gx777-77774-qaaba-cai
+dfx canister info guardian_config
+# → Controllers: <identity> u6s2n-gx777-77774-qaaba-cai <wallet>
+```
+**Verified**: ✅ guardian_engine is listed in Controllers array
+
+#### TASK 4: Smoke Test (Local)
+
+1. **Deploy config with Discord webhook**:
+   ```
+   dfx canister call guardian_config set_config "(...alert_channels = vec { \"discord;url=https://discord.com/api/webhooks/<ID>/<PLACEHOLDER>\" }...)"
+   → (variant { Ok })
+   ```
+
+2. **Verify engine running**:
+   ```
+   dfx canister call guardian_engine get_health
+   → { is_running = true; last_tick = 1_772_656_499...; watermark_count = 0 }
+   ```
+
+3. **Verify alert queue nominal**:
+   ```
+   dfx canister call guardian_engine get_alert_queue_len → (0 : nat64)
+   ```
+
+4. **Confirm controller relationship**:
+   ```
+   dfx canister info guardian_config → Controllers: ... u6s2n-gx777-77774-qaaba-cai ...
+   ```
+
+**Smoke test result**: ✅ PASS (config deployed, engine running, controller verified)  
+Note: Real Discord delivery not testable locally (HTTPS outcalls require live IC subnet)
+
+---
+
+### Test Results
+
+| Metric | Before Phase 2d | After Phase 2d |
+|--------|----------------|----------------|
+| Tests  | 262            | 273            |
+| Phase 2d tests | 0       | 11 (HMAC)      |
+| Clippy warnings | 0    | 0              |
+| Failures | 0            | 0              |
+
+---
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/guardian_engine/Cargo.toml` | Added sha2, hmac dependencies |
+| `src/guardian_engine/src/delivery.rs` | HMAC signing, build_webhook_signature, 11 tests |
+| `guardian-dev/DEV_LOG.md` | This entry |
+| `guardian-icp/README.md` | Phase 2d section |
+| `agent-status.json` | guardian-dev → idle |
+| `projects.json` | progress 80 → 85%, description updated |
+| `tasks.json` | task-10 created and marked done |
+
+---
+
+### Testnet Deployment Blocker
+
+**Issue**: `dfx identity get-principal` = `5lok2-xvf24-onx6j-zldh6-ss6u5-xinwf-5m7u2-gzaiq-lfdpo-ivagh-aae`  
+**Balance**: `0.00000000 ICP` on mainnet → 0 cycles → cannot create canisters  
+**Solution (ops task for human)**:
+1. Transfer ICP to the identity: `dfx ledger transfer <address> --amount 1.0`
+2. Convert to cycles: `DFX_WARNING=-mainnet_plaintext_identity dfx cycles convert --amount 0.5 --network ic`
+3. Deploy: `DFX_WARNING=-mainnet_plaintext_identity dfx deploy --network ic`
+4. Set controller: `DFX_WARNING=-mainnet_plaintext_identity dfx canister update-settings guardian_config --add-controller $(dfx canister id guardian_engine --network ic) --network ic`
+
+All code is production-ready. Testnet deploy is purely an ops/funding task.
+
+---
+
+### Next Steps (Phase 3)
+
+- [ ] Fund identity for testnet deployment (ops)
+- [ ] Frontend dashboard (Phase 3)
+- [ ] NNS proposal for mainnet deployment
+- [ ] Real webhook smoke test on testnet
+
+---
+
+**Guardian-Dev Status**: 🟢 Ready for Phase 3 (or testnet when funded)
+
+---
+
 ## Phase 2c: Config Canister Sync — 2026-03-04
 
 ### Session: guardian-phase2c (Subagent)

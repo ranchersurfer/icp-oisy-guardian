@@ -10,6 +10,8 @@ ic-cdk-timers = "0.7"
 candid = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 ic-stable-structures = "0.6"
+sha2 = { version = "0.10", default-features = false }
+hmac = { version = "0.12", default-features = false }
 
 [lib]
 crate-type = ["cdylib"]

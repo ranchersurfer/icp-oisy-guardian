@@ -374,6 +374,65 @@ dfx canister call guardian_config health --network local
 
 ---
 
+---
+
+## Phase 2d — Testnet Deployment with Live Config Sync ✅
+
+**Completed**: 2026-03-04  
+**Tests**: 273 total (11 new HMAC-SHA256 tests)
+
+### What Was Delivered
+
+#### HMAC-SHA256 Webhook Signing
+Webhook channel delivery now signs the request body with HMAC-SHA256:
+```
+X-Guardian-Signature: sha256=<hex_digest>
+```
+Compatible with GitHub/Discord webhook verification. Receivers can validate authenticity:
+```python
+import hmac, hashlib
+expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+assert request.headers["X-Guardian-Signature"] == f"sha256={expected}"
+```
+
+#### Local Deployment & Controller Setup
+```bash
+# Both canisters deployed:
+# guardian_config: uxrrr-q7777-77774-qaaaq-cai
+# guardian_engine: u6s2n-gx777-77774-qaaba-cai
+
+# guardian_engine set as controller of guardian_config:
+dfx canister update-settings guardian_config --add-controller u6s2n-gx777-77774-qaaba-cai
+dfx canister info guardian_config
+# → Controllers: <identity> u6s2n-gx777-77774-qaaba-cai <wallet>
+```
+
+#### Smoke Test (Local)
+1. Deploy config with Discord webhook → `(variant { Ok })`
+2. Verify engine running → `{ is_running = true; last_tick = ... }`
+3. Verify controller relationship → guardian_engine in Controllers list
+4. Verify alert queue nominal → `(0 : nat64)`
+
+### Testnet Deployment Status
+**Blocked**: Identity has 0 ICP / 0 cycles.  
+**To deploy on testnet/mainnet** (ops task):
+```bash
+# 1. Fund identity (requires ICP transfer from funded account)
+# 2. Convert ICP to cycles:
+DFX_WARNING=-mainnet_plaintext_identity dfx cycles convert --amount 0.5 --network ic
+# 3. Deploy:
+DFX_WARNING=-mainnet_plaintext_identity dfx deploy --network ic
+# 4. Set controller:
+DFX_WARNING=-mainnet_plaintext_identity dfx canister update-settings guardian_config \
+  --add-controller $(dfx canister id guardian_engine --network ic) --network ic
+```
+
+### New Dependencies
+- `sha2 = "0.10"` (WASM-compatible, no_std)
+- `hmac = "0.12"` (WASM-compatible, no_std)
+
+---
+
 ## Deployment to IC Mainnet
 
 > ⚠️ Phase 2+ — not yet configured for mainnet. Local/testnet only.

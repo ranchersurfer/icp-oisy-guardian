@@ -1,4 +1,4 @@
-//! delivery.rs — Phase 2b: Alert Delivery via HTTPS Outcall
+//! delivery.rs — Phase 2b/2d: Alert Delivery via HTTPS Outcall
 //!
 //! Delivers queued alerts to configured channels using IC HTTPS outcalls.
 //! Supports Discord webhooks, Slack webhooks, generic webhooks, and email
@@ -344,10 +344,12 @@ mod outcall {
                 );
                 let mut extra = vec![];
                 if let Some(sec) = secret {
-                    // Simple bearer token auth — production would use HMAC-SHA256
+                    // HMAC-SHA256 signing — Phase 2d
+                    // Header format: X-Guardian-Signature: sha256=<hex_digest>
+                    let sig = build_webhook_signature(sec, body.as_bytes());
                     extra.push(HttpHeader {
-                        name: "X-Guardian-Secret".to_string(),
-                        value: sec.clone(),
+                        name: "X-Guardian-Signature".to_string(),
+                        value: sig,
                     });
                 }
                 (url.clone(), body, "application/json", extra)
@@ -600,6 +602,43 @@ pub fn escape_json(s: &str) -> String {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// HMAC-SHA256 signing (Phase 2d)
+// ---------------------------------------------------------------------------
+
+/// Compute HMAC-SHA256 of `payload` using `secret` as the key.
+/// Returns the signature as a lowercase hex string.
+///
+/// This is used to sign webhook payloads so receivers can verify authenticity.
+/// The canonical header is: `X-Guardian-Signature: sha256=<hex_digest>`
+///
+/// Example verification (receiver side):
+/// ```ignore
+/// expected = HMAC-SHA256(secret, body_bytes)
+/// if constant_time_eq(request.header("X-Guardian-Signature"), "sha256=" + hex(expected)):
+///     accept
+/// ```
+pub fn hmac_sha256_hex(secret: &str, payload: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    type HmacSha256 = Hmac<Sha256>;
+
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(payload);
+    let result = mac.finalize().into_bytes();
+
+    // Convert to lowercase hex
+    result.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Build the `X-Guardian-Signature` header value for a webhook payload.
+/// Format: `sha256=<hex_digest>` (compatible with GitHub/Discord webhook verification).
+pub fn build_webhook_signature(secret: &str, payload: &[u8]) -> String {
+    format!("sha256={}", hmac_sha256_hex(secret, payload))
 }
 
 /// URL-encode a string (percent-encoding for form body fields).
@@ -1008,5 +1047,90 @@ mod tests {
         let retry_count = 1u32;
         let should_give_up = retry_count + 1 >= MAX_RETRIES;
         assert!(!should_give_up, "Should still retry at count=1");
+    }
+
+    // -----------------------------------------------------------------------
+    // HMAC-SHA256 signing (Phase 2d)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_hmac_sha256_produces_64_char_hex() {
+        let sig = hmac_sha256_hex("mysecret", b"hello world");
+        assert_eq!(sig.len(), 64, "HMAC-SHA256 hex should be 64 chars: {}", sig);
+    }
+
+    #[test]
+    fn test_hmac_sha256_is_lowercase_hex() {
+        let sig = hmac_sha256_hex("secret", b"payload");
+        assert!(sig.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()),
+            "Should be lowercase hex: {}", sig);
+    }
+
+    #[test]
+    fn test_hmac_sha256_known_value() {
+        // Known test vector: HMAC-SHA256("key", "The quick brown fox jumps over the lazy dog")
+        // Expected: f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8
+        let sig = hmac_sha256_hex("key", b"The quick brown fox jumps over the lazy dog");
+        assert_eq!(sig, "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
+            "HMAC-SHA256 test vector mismatch");
+    }
+
+    #[test]
+    fn test_hmac_sha256_different_secrets_produce_different_sigs() {
+        let sig1 = hmac_sha256_hex("secret1", b"payload");
+        let sig2 = hmac_sha256_hex("secret2", b"payload");
+        assert_ne!(sig1, sig2, "Different secrets should produce different signatures");
+    }
+
+    #[test]
+    fn test_hmac_sha256_different_payloads_produce_different_sigs() {
+        let sig1 = hmac_sha256_hex("secret", b"payload1");
+        let sig2 = hmac_sha256_hex("secret", b"payload2");
+        assert_ne!(sig1, sig2, "Different payloads should produce different signatures");
+    }
+
+    #[test]
+    fn test_hmac_sha256_same_inputs_deterministic() {
+        let sig1 = hmac_sha256_hex("secret", b"data");
+        let sig2 = hmac_sha256_hex("secret", b"data");
+        assert_eq!(sig1, sig2, "HMAC-SHA256 must be deterministic");
+    }
+
+    #[test]
+    fn test_build_webhook_signature_prefix() {
+        let sig = build_webhook_signature("secret", b"payload");
+        assert!(sig.starts_with("sha256="),
+            "Signature header value must start with 'sha256=': {}", sig);
+    }
+
+    #[test]
+    fn test_build_webhook_signature_full_length() {
+        let sig = build_webhook_signature("secret", b"payload");
+        // "sha256=" (7) + 64 hex chars = 71 total
+        assert_eq!(sig.len(), 71, "Full signature header value should be 71 chars: {}", sig);
+    }
+
+    #[test]
+    fn test_build_webhook_signature_empty_payload() {
+        // HMAC of empty payload should still produce valid signature
+        let sig = build_webhook_signature("mysecret", b"");
+        assert!(sig.starts_with("sha256="), "Empty payload signature: {}", sig);
+        assert_eq!(sig.len(), 71);
+    }
+
+    #[test]
+    fn test_build_webhook_signature_unicode_secret() {
+        // Secrets may contain unicode — should not panic
+        let sig = build_webhook_signature("🔐secret🔑", b"data");
+        assert!(sig.starts_with("sha256="), "Unicode secret signature: {}", sig);
+    }
+
+    #[test]
+    fn test_webhook_signature_matches_manual_hmac() {
+        let secret = "webhook_secret_key";
+        let payload = b"guardian alert payload";
+        let manual = hmac_sha256_hex(secret, payload);
+        let from_builder = build_webhook_signature(secret, payload);
+        assert_eq!(from_builder, format!("sha256={}", manual));
     }
 }
