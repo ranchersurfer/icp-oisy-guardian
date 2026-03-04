@@ -159,7 +159,7 @@ pub async fn fetch_icp_transactions(
             let events = response
                 .transactions
                 .iter()
-                .filter_map(|tx_with_id| icp_wire_to_internal(tx_with_id))
+                .filter_map(icp_wire_to_internal)
                 .map(|tx| icrc_tx_to_unified_event(&tx, &account, "ICP"))
                 .collect();
             Ok(events)
@@ -242,7 +242,7 @@ async fn fetch_icrc_index_ng_transactions(
             let events = response
                 .transactions
                 .iter()
-                .filter_map(|tx_with_id| icrc_wire_to_internal(tx_with_id))
+                .filter_map(icrc_wire_to_internal)
                 .map(|tx| icrc_tx_to_unified_event(&tx, &account, chain_name))
                 .collect();
             Ok(events)

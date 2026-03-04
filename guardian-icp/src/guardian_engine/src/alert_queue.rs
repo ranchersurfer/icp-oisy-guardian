@@ -22,16 +22,24 @@ const ALERT_QUEUE_MEM_ID: MemoryId = MemoryId::new(5);
 
 /// A queued alert item awaiting HTTPS delivery.
 ///
-/// `payload` holds a human-readable serialisation of the alert (Phase 2b will
-/// replace this with a structured outcall body).
+/// Phase 2b: contains all fields needed to build delivery payloads for
+/// Discord / Slack / webhook / email without re-fetching alert data.
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub struct AlertQueueItem {
     /// Unique alert identifier (matches AlertRecord.alert_id).
     pub alert_id: String,
     /// The user principal that triggered the alert.
     pub user: Principal,
-    /// Serialised alert payload (debug representation until Phase 2b).
-    pub payload: String,
+    /// Severity label: "INFO", "WARN", "CRITICAL", "EMERGENCY".
+    pub severity: String,
+    /// Numeric severity score (0–255).
+    pub severity_score: u8,
+    /// List of rule IDs and descriptions that fired.
+    pub rules_triggered: Vec<String>,
+    /// Short human-readable summary of triggering events.
+    pub events_summary: String,
+    /// Recommended remediation action for this alert.
+    pub recommended_action: String,
     /// Number of delivery attempts so far.
     pub retry_count: u32,
     /// Timestamp (nanoseconds) when the item was enqueued.
@@ -104,7 +112,11 @@ mod tests {
         AlertQueueItem {
             alert_id: id.to_string(),
             user: Principal::anonymous(),
-            payload: format!("{{\"alert_id\":\"{}\"}}", id),
+            severity: "WARN".to_string(),
+            severity_score: 3,
+            rules_triggered: vec!["A3: rapid tx".to_string()],
+            events_summary: "6 events in 10 min".to_string(),
+            recommended_action: "Monitor activity".to_string(),
             retry_count: 0,
             created_at: ts,
         }
@@ -126,12 +138,19 @@ mod tests {
         let item = AlertQueueItem {
             alert_id: "alert-xyz".to_string(),
             user: p,
-            payload: "{}".to_string(),
+            severity: "CRITICAL".to_string(),
+            severity_score: 7,
+            rules_triggered: vec!["A1: large transfer".to_string()],
+            events_summary: "1 large outgoing tx".to_string(),
+            recommended_action: "Review recent transactions".to_string(),
             retry_count: 3,
             created_at: 1_700_000_000_000_000_000,
         };
         assert_eq!(item.alert_id, "alert-xyz");
         assert_eq!(item.user, p);
+        assert_eq!(item.severity, "CRITICAL");
+        assert_eq!(item.severity_score, 7);
+        assert_eq!(item.rules_triggered.len(), 1);
         assert_eq!(item.retry_count, 3);
     }
 }

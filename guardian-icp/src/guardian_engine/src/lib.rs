@@ -1,6 +1,7 @@
 pub mod alert_queue;
 pub mod alerts;
 pub mod canisters;
+pub mod delivery;
 pub mod detector;
 pub mod fetcher;
 pub mod icrc;
@@ -19,6 +20,8 @@ use std::collections::BTreeMap;
 
 use alerts::format_alert;
 use canisters::{MAX_EVENTS_PER_USER, MAX_SEEN_TX_IDS_PER_USER};
+#[allow(unused_imports)]
+use delivery::AlertChannel;
 use detector::{evaluate, DetectionContext};
 use fetcher::{merge_into_ring_buffer, update_watermark_after_fetch};
 use icrc::IcrcAccount;
@@ -486,10 +489,11 @@ async fn run_fetch_cycle(now_ns: u64) {
                 alert_queue::enqueue_alert(alert_queue::AlertQueueItem {
                     alert_id: payload.alert_id.clone(),
                     user: principal,
-                    payload: format!(
-                        "severity={} score={} rules={:?}",
-                        payload.severity, payload.severity_score, payload.rules_triggered
-                    ),
+                    severity: payload.severity.clone(),
+                    severity_score: payload.severity_score,
+                    rules_triggered: payload.rules_triggered.clone(),
+                    events_summary: payload.events_summary.clone(),
+                    recommended_action: payload.recommended_action.clone(),
                     retry_count: 0,
                     created_at: now_ns,
                 });
@@ -645,11 +649,32 @@ fn post_upgrade() {
 
 /// Shared timer-start logic used by both init and post_upgrade.
 fn start_timer() {
+    // 30s monitoring tick
     ic_cdk_timers::set_timer_interval(
         std::time::Duration::from_secs(30),
         timer_tick,
     );
+    // 60s delivery drain tick (Phase 2b)
+    ic_cdk_timers::set_timer_interval(
+        std::time::Duration::from_secs(60),
+        delivery_tick,
+    );
     IS_RUNNING.with(|r| *r.borrow_mut() = true);
+}
+
+/// Called every 60 seconds — drains queued alerts via HTTPS outcalls.
+fn delivery_tick() {
+    #[cfg(not(test))]
+    ic_cdk::spawn(async move {
+        // Use placeholder empty channels until config canister integration (Phase 2c).
+        // In Phase 2c these will be loaded per-user from guardian_config canister.
+        let channels: Vec<delivery::AlertChannel> = vec![];
+        let (delivered, retried, failed) = delivery::run_delivery_drain(10, &channels).await;
+        ic_cdk::println!(
+            "[delivery_tick] delivered={} retried={} failed_perm={}",
+            delivered, retried, failed
+        );
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -669,6 +694,16 @@ fn get_health() -> EngineHealthStatus {
         is_running,
         watermark_count,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Query endpoints (Phase 2b additions)
+// ---------------------------------------------------------------------------
+
+/// Return the current number of alerts in the delivery queue.
+#[query]
+fn get_alert_queue_len() -> u64 {
+    alert_queue::queue_len()
 }
 
 // ---------------------------------------------------------------------------
