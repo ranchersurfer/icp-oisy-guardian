@@ -116,7 +116,7 @@ pub struct AlertRecord {
 }
 
 impl Storable for AlertRecord {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
     // C5 Fix: use expect() instead of unwrap()
@@ -136,7 +136,7 @@ pub struct Watermark {
 }
 
 impl Storable for Watermark {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
     // C5 Fix: use unwrap_or_default() — Watermark has a safe Default
@@ -164,7 +164,7 @@ impl WatermarkKey {
 }
 
 impl Storable for WatermarkKey {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.0.to_vec())
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
@@ -183,7 +183,7 @@ struct LastTick {
 }
 
 impl Storable for LastTick {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
     // C5 Fix: use unwrap_or_default() — LastTick has a safe Default
@@ -200,7 +200,7 @@ struct StoredPrincipal {
 }
 
 impl Storable for StoredPrincipal {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
     // C5 Fix: use unwrap_or_default() — StoredPrincipal has a safe Default
@@ -269,7 +269,7 @@ thread_local! {
         ));
 
     /// Runtime flag: has the timer been started?
-    static IS_RUNNING: RefCell<bool> = RefCell::new(false);
+    static IS_RUNNING: RefCell<bool> = const { RefCell::new(false) };
 }
 
 // ---------------------------------------------------------------------------

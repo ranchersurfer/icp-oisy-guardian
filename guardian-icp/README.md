@@ -1,6 +1,6 @@
 # Guardian ICP — Phase 1 MVP ✅
 
-**Status:** Phase 1 complete (local deployment tested, 143 tests passing)
+**Status:** Phase 1 complete (local deployment tested, 200 tests passing, zero clippy warnings)
 
 Real-time wallet monitoring for OISY on the Internet Computer. Detects suspicious activity across ICP, ckBTC, and ckETH by analyzing ICRC-1/ICRC-3 transaction history.
 
@@ -197,7 +197,7 @@ service guardian_engine : {
 ## Testing
 
 ```bash
-# Run all 143 unit + integration tests
+# Run all 200 unit + integration tests
 cargo test
 
 # Run only integration tests
@@ -208,12 +208,15 @@ cargo test -p guardian_config
 
 # Run only guardian_engine tests
 cargo test -p guardian_engine
+
+# Clippy (zero warnings required)
+cargo clippy --target wasm32-unknown-unknown
 ```
 
 **Test coverage (Phase 1 MVP):**
-- 14 guardian_config tests (validation, rate limiting, health)
-- 129 guardian_engine tests (unit + integration)
-- **143 total, 0 failures**
+- 18 guardian_config tests (validation, rate limiting, health, NaN/Infinity)
+- 182 guardian_engine tests (unit + integration + detector + fetcher)
+- **200 total, 0 failures, 0 clippy warnings**
 
 ---
 
@@ -270,7 +273,7 @@ Ensure `dfx identity` has sufficient cycles and the identity has controller righ
 
 | Version | Tag | Description |
 |---------|-----|-------------|
-| 0.1.0   | v0.1-mvp | Phase 1 MVP — local deployment, 143 tests |
+| 0.1.0   | v0.1-mvp | Phase 1 MVP — local deployment, 200 tests, zero clippy warnings |
 
 ---
 

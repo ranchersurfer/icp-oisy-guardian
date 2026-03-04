@@ -38,7 +38,7 @@ pub struct GuardianConfig {
 }
 
 impl Storable for GuardianConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
 
@@ -58,7 +58,7 @@ pub struct UpdateTimestamps {
 }
 
 impl Storable for UpdateTimestamps {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
 
@@ -333,7 +333,7 @@ fn health() -> ApiResult<HealthStatus> {
 #[query]
 fn get_stats() -> ApiResult<(u64, u64)> {
     CONFIGS.with(|configs| {
-        let config_count = configs.borrow().len() as u64;
+        let config_count = configs.borrow().len();
         let timestamp = api::time();
         ApiResult::Ok((config_count, timestamp))
     })

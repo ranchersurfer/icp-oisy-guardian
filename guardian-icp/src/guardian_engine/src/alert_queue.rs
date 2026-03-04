@@ -39,7 +39,7 @@ pub struct AlertQueueItem {
 }
 
 impl Storable for AlertQueueItem {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(candid::encode_one(self).unwrap())
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
