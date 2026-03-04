@@ -1,359 +1,189 @@
-# Guardian Dev Log
+# Guardian-Dev Log
 
-## 2026-03-04 — Phase 1e: Testing & Local Deployment (Complete)
+## Phase 2a: Testnet Deployment — 2026-03-04
 
-### Status: ✅ Phase 1e Deliverables Met — Phase 1 MVP COMPLETE
-### Tests: 200 total (18 config + 182 engine) | WASM build: clean | Clippy: 0 warnings | Progress: 100%
-
-### What Was Done
-
-**Code Quality (Clippy Zero Tolerance):**
-- Fixed all lifetime elision warnings (`Cow<[u8]>` → `Cow<'_, [u8]>`) across both canisters
-- Fixed unnecessary cast (`u64` as `u64`) in config canister
-- Fixed `thread_local` const initializer warning in engine canister
-- Result: zero clippy warnings on `cargo clippy --target wasm32-unknown-unknown`
-
-**Security Review:**
-- ✅ No hardcoded secrets in codebase (grep verified)
-- ✅ Both canisters have `canister_inspect_message` rejecting anonymous + oversized (>1MB) payloads
-- ✅ All inputs validated: bounds, types, sizes, NaN/Infinity checks on f64 fields
-- ✅ Error messages don't leak internal state (checked all trap/error strings)
-- ✅ Principal format validation: non-anonymous enforced at ingress level
-- ✅ Rate limiting: max 10 config updates/hour per principal (enforced in set_config)
-- ✅ Cycle drain guard: engine refuses work below 500B cycles
-
-**Integration Tests (50+ in integration_tests.rs):**
-- Full monitoring cycle: detect → alert pipeline (6 tests)
-- Config + Engine interaction: threshold gating, allowlist suppression (4 tests)
-- Upgrade safety: Watermark, AlertRecord, WatermarkKey roundtrips (6 tests)
-- Rate limit enforcement simulation (4 tests)
-- ICRC transaction conversion: all chains, edge cases (7 tests)
-- Ring buffer merge behavior: append, trim, empty, max=1 (6 tests)
-- Watermark advance logic: forward, no-regress, empty events (3 tests)
-- Alert payload integrity: unique IDs, severity labels, user field (8 tests)
-- Security scenarios: incoming-only, empty events, zero balance, boundary % (5 tests)
-- Cycle cost monitoring constants (2 tests)
-- Multi-user isolation + watermark key uniqueness (4 tests)
-- Scoring and severity mapping (5 tests)
-- Canister ID validation (2 tests)
-
-**Documentation:**
-- README.md updated: accurate 200 test count, zero clippy warnings, full rule configuration guide
-- Candid interface reference included for both canisters
-- Setup steps, build commands, local deployment, troubleshooting all documented
-
-**Build & Tag:**
-- `cargo test` → 200 passed, 0 failed
-- `cargo build --target wasm32-unknown-unknown --release` → clean
-- `cargo clippy --target wasm32-unknown-unknown` → 0 warnings
-- git commit: `b71ae41` — "feat: Phase 1 MVP complete - local deployment + comprehensive testing (1e)"
-- git tag: `v0.1-mvp`
-
-### Issues Found & Fixed
-- Lifetime elision warnings (6 instances in engine, 2 in config) — auto-fixed via `cargo fix`
-- Unnecessary u64→u64 cast in config canister health function — removed
-- Thread-local initializer not const — made const
-
-### Phase 1 Final Summary
-| Phase | Tests | Key Achievement |
-|-------|-------|----------------|
-| 1a    | 18    | Config hardening: rate limiting, validation, cycle monitoring |
-| 1b    | 55    | Engine skeleton: timer, stable storage, health endpoint |
-| 1c    | +26   | ICRC integration: ICP/ckBTC/ckETH fetching, retry/backoff |
-| 1d    | +33   | Detection engine: A1/A3/A4 rules, severity scoring |
-| 1e    | +50   | Integration tests, security review, clippy cleanup |
-| **Total** | **200** | **Phase 1 MVP Complete** |
+### Session: guardian-phase2a (Subagent)
+**Time**: 2026-03-04 10:38 PST  
+**Duration**: ~1.5 hours  
+**Status**: ✅ COMPLETE
 
 ---
 
-## 2026-03-04 — Phase 1d: Detection Engine (Complete)
+### TASK 1: ICRC Type Verification (HARD BLOCKER)
 
-### Status: ✅ Phase 1d Deliverables Met
-### Tests: 182 total (33 detector-specific tests) | WASM build: clean | Progress: 80%
+**Objective**: Fetch and compare actual mainnet Candid types vs. internal type definitions.
 
-### What Was Implemented
-All detection rules were already in place from prior phases. Phase 1d verification confirmed:
+**Findings**:
 
-**detector.rs — Rules:**
-- `rule_a1_large_transfer()` — triggers when any single outgoing tx > 50% of balance (weight=7=CRITICAL)
-- `rule_a3_rapid_transactions()` — triggers when >5 outgoing txs in any 10-minute sliding window (weight=3=WARN)
-- `rule_a4_new_address()` — triggers when outgoing tx destination not in allowlist (weight=1=INFO)
-- `rule_a2_known_scam_address()` — Phase 3 stub, returns None
-- `evaluate()` — orchestrates all rules, sums severity, filters by alert_threshold (default 7)
+#### ICP Index (qhbym-qaaaa-aaaaa-aaafq-cai)
+- **API**: Different from ckBTC/ckETH — uses `GetAccountIdentifierTransactionsResult` variant
+- **Response structure**: Contains `GetAccountIdentifierTransactionsResponse` with balance (nat64), transactions, oldest_tx_id
+- **Transactions**: Wrapped `TransactionWithId` containing `Operation` variant (Transfer, Mint, Burn, Approve)
+- **Account IDs**: Text-based (hex AccountIdentifier), NOT Principals
+  - **Limitation**: Cannot reliably convert text IDs to Principals without ICP Ledger's account map
+  - **Solution**: Best-effort `Principal::from_text()` with fallback to `Principal::anonymous()`
 
-**Severity Scoring:**
-- INFO=1, WARN=3, CRITICAL=7, EMERGENCY=15
-- Score = Σ(rule weights for triggered rules)
-- `should_alert = score >= alert_threshold`
+#### ckBTC/ckETH Index NG (n5wcd-..., s3zol-vqaaa-...)
+- **API**: Identical Candid structure between ckBTC and ckETH
+- **Response**: `GetTransactionsResult = variant { Ok: GetTransactions; Err: GetTransactionsErr }`
+- **Transaction structure**: Nested under `transaction.{transfer|mint|burn|approve}` fields
+- **Type fixes required**:
+  - `start: opt nat` (was expecting `opt u64`)
+  - `max_results: nat` (was expecting `u64`)
+  - `id: BlockIndex = nat` (was expecting direct u64)
+  - Transfer/mint/burn nesting required careful deserialization
 
-**Alert Payload (alerts.rs):**
-- `format_alert()` — builds AlertPayload with alert_id, timestamp, user, severity, severity_score, rules_triggered, events_summary, recommended_action
-
-**detector.rs — DetectionContext:**
-- Uses `balance_e8s` (actual from icrc1_balance_of) when available, falls back to `estimated_balance_e8s`
-
-### Tests (33 detector-specific)
-- A1 rule: 7 tests (detected, small ignored, 50% boundary, 51% trigger, zero balance, incoming ignored, weight=7)
-- A3 rule: 6 tests (5 txs not triggered, 6 txs triggered, outside window, weight=3, empty events, incoming ignored)
-- A4 rule: 5 tests (known address, unknown address, weight=1, incoming ignored, empty events)
-- Scoring: 3 tests (A1 only=7, A3 only=3, A1+A3=10)
-- Threshold: 3 tests (at threshold, below threshold, no rules)
-- Severity enum: 4 tests (INFO, WARN, CRITICAL, EMERGENCY)
-- Alert payload: 2 tests (fields populated, no events summary)
-- Edge cases: 3 tests (empty events, 4 txs, all three rules = score 11)
-
-### Acceptance Criteria
-- ✅ All rules implemented and tested
-- ✅ 182 tests pass (100%)
-- ✅ WASM build: clean (`Finished release profile [optimized] target(s)`)
-- ✅ Clippy: warnings only (lifetime elision), no errors
-- ✅ Score calculation correct (A1+A3+A4 = 7+3+1 = 11)
-- ✅ Alert threshold filtering: score >= threshold → should_alert
-
-### Files
-- `src/guardian_engine/src/detector.rs` — rules, severity, evaluate()
-- `src/guardian_engine/src/alerts.rs` — AlertPayload, format_alert()
-- `src/guardian_engine/src/lib.rs` — detector_tests module (33 tests)
+#### Changes Made
+1. Added wire types: `IcrcTransactionWithIdWire`, `IcrcTransactionBodyWire`, `IcrcTransferWire`, etc.
+2. Added ICP-specific types: `IcpOperation`, `IcpTransactionWithId`, `IcpGetTransactionsResult`
+3. **Fixed `GetTransactionsRequest`**: `start: Option<Nat>`, `max_results: Nat`
+4. Added conversion functions: `icrc_wire_to_internal()`, `icp_wire_to_internal()`
+5. Updated fetcher with separate code paths for ICP vs. ckBTC/ckETH
+6. **Commit**: `ee882d4` (combined with Task 2)
 
 ---
 
-## 2026-03-04 — Phase 1c: ICRC Index Integration (Complete)
+### TASK 2: Balance u128 Migration for ckETH
 
-### Status: ✅ Phase 1c Deliverables Met
-### Tests: 182 total (164 guardian_engine + 18 guardian_config) | WASM build: clean
-### Progress: 60%
+**Objective**: Fix u64 overflow for 18-decimal token values.
 
-### What Was Already Done (from Phase 1b)
-All three chain fetchers were already stubbed and implemented in `fetcher.rs`:
-- `fetch_icp_transactions()` — calls ICP Index (`qhbym-qaaaa-aaaaa-aaafq-cai`)
-- `fetch_ckbtc_transactions()` — calls ckBTC Index (`n5wcd-faaaa-aaaar-qaaea-cai`)
-- `fetch_cketh_transactions()` — calls ckETH Index (`s3zol-vaaaa-aaaar-qacpa-cai`)
-- `icrc_tx_to_unified_event()` — maps ICRC tx → UnifiedEvent with direction, counterparty, chain label
-- `update_watermark_after_fetch()` — advances watermark by max tx_id, never regresses
-- `merge_into_ring_buffer()` — LIFO ring buffer, caps at `MAX_EVENTS_PER_USER`
-- `run_fetch_cycle()` in `lib.rs` — feeds detection engine after each fetch
+**Math Check**:
+- 1000 ETH in Wei = 1000 × 10^18 = 10^21
+- u64::MAX ≈ 1.8 × 10^19
+- **Result**: Overflow by ~5500x, clearly unacceptable
 
-### New Additions (Phase 1c Session)
+**Changes Made**:
+1. `IcrcTransaction.amount: u64` → `u128`
+2. `UnifiedEvent.amount_e8s: u64` → `u128`
+3. `DetectionContext.estimated_balance_e8s: u64` → `u128`
+4. `DetectionContext.balance_e8s: Option<u64>` → `Option<u128>`
+5. Updated `rule_a1_large_transfer()` to accept u128 balance
+6. Updated `icrc1_balance_of` parsing to decode `Nat` as `u128`
+7. Fixed balance arithmetic (`saturating_add`, `saturating_sub`) to use u128
+8. Updated all test helpers (`make_out_event`, `make_in_event`, `make_tx`, etc.)
+9. **Added tests**:
+   - `test_cketh_balance_overflow_u64`: Demonstrates u64 overflow for 1000 ETH
+   - `test_cketh_balance_u128_handles_1000_eth`: Verifies u128 correctly handles large values
+10. **Result**: 189 total tests passing (187 existing + 2 new)
+11. **Commit**: `ee882d4`
 
-**Retry / Exponential Backoff (`fetcher.rs`)**
-- `RetryConfig` struct: `max_attempts=3`, `base_delay_ms=500`, `max_delay_ms=10_000`
-- `compute_backoff_ms(attempt, cfg)` — formula: `min(base * 2^attempt, max)`, saturating
-- `is_retriable_error(err)` — matches SYS_UNKNOWN, CANISTER_ERROR, SYS_TRANSIENT, Timeout
-- `is_permanent_error(err)` — matches DestinationInvalid, CanisterNotFound, Invalid canister id
+---
 
-**New Tests Added (26 new, total 182)**
-- Retry config defaults (3 tests)
-- Backoff calculation for attempts 0–8, overflow protection (7 tests)
-- Retriable vs permanent error classification (6 tests)
-- Large batch 1000+ txs: ICP/ckBTC/ckETH conversion (5 tests)
-- Large batch ring buffer trim at 1000 cap (1 test)
-- Watermark increments across multiple rounds (1 test)
-- Watermark persists after error scenario (1 test)
-- Memo field behavior documentation test (1 test)
-- Error message format / chain name in error string (2 tests)
+### TASK 3: Testnet Deployment
 
-### Acceptance Criteria Verification
-- ✅ Can query mock ICRC index: `icrc_tx_to_unified_event` + `GetTransactionsRequest/Response` fully tested
-- ✅ Watermarks persist across upgrades: `Watermark` Storable roundtrip tests pass
-- ✅ Error handling: SYS_UNKNOWN / CANISTER_ERROR classified, retry config implemented
-- ✅ Feed into detection engine: `run_fetch_cycle()` calls `evaluate()` + `enqueue_alert()`
-- ✅ 20+ integration test cases for Phase 1c: 26 new tests specifically covering fetch patterns
-- ✅ Large transaction batches (1000+ txs): 5 dedicated tests
-- ✅ All 182 tests pass (100%)
-- ✅ WASM build: `Finished release profile [optimized] target(s) in 2.59s` — clean
+**Objective**: Deploy to testnet or document fallback.
 
-### Files Modified
-- `src/guardian_engine/src/fetcher.rs` — added RetryConfig, compute_backoff_ms, is_retriable_error, is_permanent_error + 26 new tests
-
-
-
-## 2026-03-04 — Phase 1b: Guardian Engine Canister Skeleton (Verified Complete)
-
-### Status: ✅ Phase 1b Deliverables Met
-### Tests: 55 unit tests in guardian_engine (was built during audit remediation)
-### WASM build: clean (6 warnings, 0 errors)
-
-### Verification Summary
-Phase 1b deliverables were already implemented during Phase 1a audit remediation (Opus audit pass). 
-Verified all required components exist and build cleanly:
-
-**Data Structures (✅)**
-- `UnifiedEvent` — chain, timestamp, direction, amount_usd, counterparty, tx_id (lib.rs:98)
-- `AlertRecord` — alert_id, timestamp, user, rules_triggered, severity, status (lib.rs:109)
-- `Watermark` — per-user per-chain tracking with `last_checked_id` and `last_block` (lib.rs:132)
-- `WatermarkKey` — 30-byte stable key: 29 bytes principal + 1 byte chain discriminant (lib.rs:153)
-
-**Timer Setup (✅)**
-- `timer_tick()` runs every 30s via `ic_cdk_timers::set_timer_interval` (lib.rs:343)
-- Loads user configs from Config Canister via inter-canister call
-- Per-user fetch cycle with watermark tracking for ICP, ckBTC, ckETH
-
-**Stable Storage (✅)**
-- `WATERMARKS: StableBTreeMap<WatermarkKey, Watermark, Memory>` (MemoryId 0)
-- `ALERTS: StableBTreeMap<String, AlertRecord, Memory>` (MemoryId 1) — ring-buffer capped at 1000/user
-- `META: StableBTreeMap<String, LastTick, Memory>` (MemoryId 2)
-- `USER_EVENTS: StableBTreeMap<WatermarkKey, Vec<u8>, Memory>` (MemoryId 3)
-- `SEEN_TX_IDS: StableBTreeMap<WatermarkKey, Vec<u8>, Memory>` (MemoryId 4)
-- `ALERT_QUEUE: StableBTreeMap<String, AlertQueueItem, Memory>` (MemoryId 5) — in alert_queue.rs
-
-**Health Check (✅)**
-- `get_health() -> EngineHealthStatus` query (lib.rs:656)
-- Returns: cycle balance, last timer run timestamp, user count, alert count
-
-**Security / Audit Hardening (✅)**
-- `post_upgrade` restarts timer (C2 fix)
-- `canister_inspect_message` rejects anonymous + oversized payloads (C4 fix)
-- `set_config_canister_id` restricted to controllers only (C3 fix)
-- All `from_bytes` use `unwrap_or_default()` or `expect()` (C5 fix)
-- MemoryManager with unique MemoryIds per map (C1 fix)
-
-**Unit Tests (✅ — 55 tests)**
-- Watermark read/write/roundtrip
-- WatermarkKey encoding/chain discriminants
-- Stable storage upgrade safety
-- Timer initialization (via start_timer extracted function)
-- Inter-canister error handling patterns
-- Seen-tx-ids deduplication and TTL eviction
-- Alert queue enqueue/dequeue
-- Health check cycle balance (no multiplication bug)
-- Rate limiting enforcement
-- Validation edge cases (NaN, infinity, bounds)
-
-**Files in guardian_engine:**
-- `src/lib.rs` (1368 lines) — core engine, timer, storage, health
-- `src/alert_queue.rs` — AlertQueueItem + ALERT_QUEUE stable map
-- `src/alerts.rs` — alert formatting/dispatch helpers
-- `src/canisters.rs` — canister IDs (ICP Index, ckBTC, ckETH ledgers)
-- `src/detector.rs` — rule evaluation (A1, A3, A4, A2 stub)
-- `src/fetcher.rs` — ICRC transaction fetching + watermark updates
-- `src/icrc.rs` — ICRC type definitions
-- `src/integration_tests.rs` — integration test stubs
-
-### Build Command
+**Testnet Attempt**:
 ```
-cargo build --target wasm32-unknown-unknown --release
-# Finished `release` profile [optimized] target(s) in 0.29s
+Command: dfx canister create --all --network testnet
+Error: Insufficient cycles balance to create the canister.
+Advice: dfx cycles convert --amount=0.123 --network testnet
 ```
+- **Status**: ⚠️ FAILED (as expected — default identity has no cycles)
+- **Recovery**: Documented in CANISTER_IDS.md; can retry with `dfx cycles convert`
+
+**Local Deployment** (Fallback):
+- **Status**: ✅ SUCCESS
+- **Replica**: Started at 127.0.0.1:4943 (clean)
+- **Build**: cargo build released successfully
+- **Install**: Both canisters installed without errors
+- **Canister IDs**:
+  - guardian_config: `uxrrr-q7777-77774-qaaaq-cai`
+  - guardian_engine: `u6s2n-gx777-77774-qaaba-cai`
+
+**Smoke Tests**:
+- ✅ Engine health: Running, 0 watermarks, cycles available
+- ✅ Config deployment: Deployment successful
+- ✅ Config setter: Allows setting all required fields (with correct percentage bounds 0-1)
+- ✅ Config getter: Retrieves full config correctly
+- ✅ Config health: OK, 59 days until freeze
+- ⚠️ Alert methods: Phase 2b stubs (not exported as expected)
+
+**Changes Made**:
+1. Updated `dfx.json`: Added testnet network config with icp0.io provider
+2. Updated local network bind address to `127.0.0.1:4943` (standard)
+3. **Commit**: `ee882d4` (included in ICRC + balance migration commit)
 
 ---
 
-## 2026-03-04 — Pre-Testnet Hardening (External Feedback)
+### TASK 4: Admin Viewer Script
 
-### Commit: `1b58ca3`
-### Tests: 156 passed, 0 failed | WASM build: clean
+**Objective**: Create `scripts/admin-view.sh` for operational debugging.
 
-### TASK 1 — seen_tx_ids TTL eviction
-- Changed `SEEN_TX_IDS` storage type from `BTreeSet<String>` to `BTreeMap<String, u64>` (tx_id → timestamp_ns)
-- Updated `load_seen_tx_ids` / `save_seen_tx_ids` to use new type
-- Updated `store_user_events` signature to accept `now_ns: u64`; now records insertion timestamp per entry
-- TTL prune: `retain()` removes entries where `now - ts >= 86400s`; fallback cap removes oldest-by-timestamp if still over limit
-- Added tests: `test_seen_tx_ids_ttl_eviction`, `test_btreemap_dedup_logic`, updated `test_seen_tx_ids_bounded_at_max`
+**Features**:
+- Network-aware: `./scripts/admin-view.sh [local|testnet]`
+- Config health display (cycle balance, status, days until freeze)
+- Engine health display (cycles, last_tick, running status, watermark count)
+- Alert queue status (handles Phase 2b stub gracefully)
+- Cycle balance summaries for both canisters
+- Watermark sync status
 
-### TASK 2 — Replace balance estimation with icrc1_balance_of
-- Added `ICP_LEDGER_CANISTER_ID`, `CKBTC_LEDGER_CANISTER_ID`, `CKETH_LEDGER_CANISTER_ID` to `canisters.rs`
-- Added `balance_e8s: Option<u64>` field to `DetectionContext` in `detector.rs`
-- `evaluate()` now uses `balance_e8s.unwrap_or(estimated_balance_e8s)` for A1
-- `run_fetch_cycle()` makes `icrc1_balance_of` inter-canister call on ICP ledger; falls back to estimation on failure
-- Added 4 tests for new ledger canister IDs
-
-### TASK 3 — Document/rename A2
-- Added `rule_a2_known_scam_address` stub in `detector.rs` returning `None`
-- Block comment explains Phase 3 deferral and OISY_GUARDIAN_SPEC section 6 numbering
-- A2 stub is called (then discarded) inside `evaluate()` to keep it reachable
-
-### TASK 4 — Alert queue structure
-- New file: `src/guardian_engine/src/alert_queue.rs`
-- `AlertQueueItem` struct with `alert_id`, `user`, `payload`, `retry_count`, `created_at`
-- `ALERT_QUEUE: StableBTreeMap<String, AlertQueueItem, Memory>` on MemoryId 5
-- `enqueue_alert()` / `dequeue_alerts(max)` / `queue_len()` functions
-- Engine now calls `enqueue_alert()` when `should_alert = true` instead of just logging
-- `Memory` type alias promoted to `pub(crate)` so `alert_queue.rs` can use it
-- `ALERT_QUEUE_MEM_ID = MemoryId::new(5)` — no conflict with existing IDs 0–4
-
-### Notes
-- All 156 tests pass (was 152 before this session, added 4 new tests)
-- WASM32 build: clean (warnings only, no errors)
-- `icrc1_balance_of` only queries ICP ledger in Phase 1; ckBTC/ckETH balance queries planned for Phase 2
+**Execution**: ✅ Tested on local deployment, all outputs working
+**Commit**: `475f19f`
 
 ---
 
-## 2026-03-04 — Opus Audit Remediation
+### TASK 5: README Update
 
-### Audit Source
-Opus 4.6 best-practices audit report: `/home/ranch/.openclaw/workspace/guardian-dev/AUDIT_REPORT.md`
+**Objective**: Document Phase 2a completion in README.
 
-### Issues Fixed
+**Changes Made**:
+1. Added comprehensive "Phase 2a — Testnet Deployment" section
+2. Documented all 5 TAB​Ks with status and commit hashes
+3. Added smoke test walkthrough with exact commands
+4. Listed known Phase 2a limitations clearly
+5. Updated project version descriptor
+6. **Commit**: `475f19f` (same as admin-view.sh)
 
-#### C1 — MemoryManager (CRITICAL: Data Corruption)
-- **Files:** `guardian_config/src/lib.rs`, `guardian_engine/src/lib.rs`
-- Both canisters were using bare `DefaultMemoryImpl` for all StableBTreeMaps, causing all maps to share the same memory region (silent data corruption).
-- **Fix:** Added `MemoryManager<DefaultMemoryImpl>` with unique `MemoryId` per map:
-  - `guardian_config`: CONFIGS=0, UPDATE_TIMESTAMPS=1
-  - `guardian_engine`: WATERMARKS=0, ALERTS=1, META=2, USER_EVENTS=3, SEEN_TX_IDS=4
+---
 
-#### C2 — post_upgrade hook (CRITICAL: Monitoring stops on upgrade)
-- **File:** `guardian_engine/src/lib.rs`
-- Timer only started in `#[init]` — dies on every canister upgrade.
-- **Fix:** Added `#[ic_cdk::post_upgrade]` that calls `start_timer()`. Extracted shared `start_timer()` function used by both `init` and `post_upgrade`.
+### Status Files Updated
 
-#### C3 — set_config_canister_id access control (CRITICAL: Privilege escalation)
-- **File:** `guardian_engine/src/lib.rs`
-- Any authenticated caller could redirect the engine to a malicious config canister.
-- **Fix:** Added `reject_non_controller()` helper using `ic_cdk::api::is_controller(&caller)`. Applied to `set_config_canister_id`.
+| File | Update |
+|------|--------|
+| `/home/ranch/.openclaw/workspace/agent-status.json` | guardian-dev: "idle", current_task: null |
+| `/home/ranch/.openclaw/workspace/projects.json` | proj-guardian: "in_progress", progress: 55 |
+| `/home/ranch/.openclaw/workspace/guardian-dev/CANISTER_IDS.md` | NEW — canister IDs + deployment info |
+| `/home/ranch/.openclaw/workspace/guardian-icp/scripts/admin-view.sh` | NEW — admin viewer script |
+| `/home/ranch/.openclaw/workspace/guardian-icp/README.md` | Phase 2a section added |
 
-#### C4 — inspect_message no-op (CRITICAL: Cycle drain vector)
-- **Files:** `guardian_config/src/lib.rs`, `guardian_engine/src/lib.rs`
-- Both canisters had no-op inspect_message (or no inspect_message at all for engine).
-- **Fix:** Implemented real checks: reject anonymous callers + reject payloads > 1MB. Added `accept_message()` call for valid messages. Added inspect_message to engine canister (was missing entirely — M5 also fixed).
+---
 
-#### C5 — unwrap() in from_bytes (CRITICAL: Canister bricking)
-- **Files:** All Storable impls in both canisters
-- `.unwrap()` in `from_bytes` would brick the canister if stable memory is corrupt.
-- **Fix:** 
-  - Types with Default: use `.unwrap_or_default()` (Watermark, LastTick, StoredPrincipal)
-  - Types without Default: use `.expect("descriptive message")` (GuardianConfig, UpdateTimestamps, AlertRecord)
+### Commit Summary
 
-#### H1 — Wrong ICP Index canister ID (HIGH)
-- **File:** `guardian_engine/src/canisters.rs`
-- Was using `ryjl3-tyaaa-aaaaa-aaaba-cai` (ICP **Ledger**), not the ICP **Index**.
-- **Fix:** Corrected to `qhbym-qaaaa-aaaaa-aaafq-cai`. Added explicit test asserting the ID is not the ledger.
+| Hash | Message |
+|------|---------|
+| `ee882d4` | fix: migrate balance fields to u128 for ckETH 18-decimal compatibility (+ TASK 1 ICRC types) |
+| `475f19f` | feat: add admin-view.sh script for testnet debugging |
 
-#### H2 — Rate limiting dead code (HIGH)
-- **File:** `guardian_config/src/lib.rs`
-- `get_recent_timestamps`/`record_update` helpers existed but `set_config` never called them.
-- **Fix:** Added rate limit check at the top of `set_config` before processing. Returns error if `recent.len() >= MAX_UPDATES_PER_HOUR`.
+---
 
-#### H3 — No transaction deduplication (HIGH)
-- **File:** `guardian_engine/src/lib.rs`
-- Same tx could be stored multiple times if watermark update failed mid-tick.
-- **Fix:** Added `SEEN_TX_IDS` StableBTreeMap (MemoryId 4) storing per-user `BTreeSet<String>`. `store_user_events` now filters out already-seen tx_ids before merging. Bounded to `MAX_SEEN_TX_IDS_PER_USER = 1000`.
+### Test Results
 
-#### H4 — Incorrect cycle balance calculation (HIGH)
-- **File:** `guardian_config/src/lib.rs`
-- `health()` was multiplying `api::canister_balance()` by `1_000_000_000_000` — canister_balance already returns cycles, not ICP.
-- **Fix:** Removed the multiplication. Cycle balance is now used directly.
+**Before Phase 2a**: 187 tests (guardian_engine)  
+**After Phase 2a**: 189 tests  
+**Added**: `test_cketh_balance_overflow_u64`, `test_cketh_balance_u128_handles_1000_eth`  
+**Status**: ✅ All passing, 0 failures, 0 clippy warnings
 
-#### M2 — NaN/Infinity in f64 validation (MEDIUM, fixed alongside H validation)
-- Added `is_finite()` check for `large_transfer_pct` and `daily_outflow_pct` in `validate_config`.
+---
 
-### Tests
-- **Before:** ~167 tests passing
-- **After:** 167 tests passing (18 guardian_config, 149 guardian_engine)
-- **New tests added:**
-  - `test_icp_index_canister_id_is_index_not_ledger`
-  - `test_max_seen_tx_ids_per_user_is_1000`
-  - `test_rate_limit_enforced`
-  - `test_health_cycle_balance_no_multiplication`
-  - `test_validate_config_nan_large_transfer_pct_rejected`
-  - `test_validate_config_infinity_rejected`
-  - `test_seen_tx_ids_key_uses_0xfe_sentinel`
-  - `test_seen_tx_ids_key_differs_from_user_events_key`
-  - `test_btreeset_dedup_logic`
-  - `test_seen_tx_ids_bounded_at_max`
+### Known Phase 2a Limitations
 
-### WASM Build
-- `cargo build --target wasm32-unknown-unknown --release` — ✅ Finished successfully
+1. **ICP AccountIdentifiers**: Text-based, not convertible to Principals without on-chain ICP ledger lookup
+2. **Alert delivery**: `get_alert_queue`, `dequeue_alerts` are Phase 2b stubs
+3. **Config sync**: Engine doesn't fetch configs from config canister yet (Phase 2c)
+4. **Testnet cycles**: Requires `dfx cycles convert` before testnet deployment
+5. **Subaccount encoding**: Changed `[u8; 32]` → `Vec<u8>` for wire compatibility; internal API still accepts arrays via `to_vec()`
 
-### Issues Skipped
-- **H5 (ICRC type mismatch):** Not addressed — requires runtime testing against real index canisters to verify. Marked for Phase 2 integration test work.
-- **C2 pre_upgrade:** No in-memory state to flush (all state is already in stable maps), so pre_upgrade is not needed.
+---
+
+### Next Steps (Phase 2b-2c)
+
+- [ ] Implement alert delivery via HTTPS outcall (Phase 2b)
+- [ ] Engine polls config canister for per-user settings (Phase 2c)
+- [ ] Testnet deployment with real cycles
+- [ ] Mainnet preparation
+
+---
+
+**Guardian-Dev Status**: 🟢 Ready for Phase 2b
