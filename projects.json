@@ -1,0 +1,83 @@
+[
+  {
+    "id": "proj-guardian",
+    "name": "OISY Guardian MVP",
+    "description": "Wallet safety and transaction guardian for ICP. Phase 1 covers local devnet: Config Canister, rule validation engine, mock OISY integration, audit logging.",
+    "status": "active",
+    "progress": 60,
+    "owner_agent_id": "guardian-dev",
+    "created_at": "2026-03-02T00:00:00Z",
+    "updated_at": "2026-03-04T17:45:00Z",
+    "roadmap_id": "R9",
+    "related_tasks": [],
+    "related_docs": [
+      "guardian-icp/DEV_PLAN.md"
+    ],
+    "related_memories": []
+  },
+  {
+    "id": "proj-prospector",
+    "name": "Prospector Lead Gen",
+    "description": "Automated lead generation for AI automation agency. Scan Upwork/LinkedIn every 6 hours, draft personalized proposals, track pipeline.",
+    "status": "not_started",
+    "progress": 0,
+    "owner_agent_id": "prospector",
+    "created_at": "2026-03-01T00:00:00Z",
+    "updated_at": "2026-03-01T00:00:00Z",
+    "roadmap_id": "R7",
+    "related_tasks": [],
+    "related_docs": [
+      "prospector/PROSPECTOR_RULES.md"
+    ],
+    "related_memories": []
+  },
+  {
+    "id": "proj-creator",
+    "name": "Creator Content Engine",
+    "description": "Automated social media content pipeline for horror/AI/OpenClaw niches. 10\u201312 posts/week across TikTok, IG, LinkedIn, YouTube, Twitter.",
+    "status": "not_started",
+    "progress": 0,
+    "owner_agent_id": "creator",
+    "created_at": "2026-03-01T00:00:00Z",
+    "updated_at": "2026-03-01T00:00:00Z",
+    "roadmap_id": "R8",
+    "related_tasks": [],
+    "related_docs": [
+      "creator/CONTENT_STRATEGY.md"
+    ],
+    "related_memories": []
+  },
+  {
+    "id": "proj-dashboard",
+    "name": "Mission Control Dashboard",
+    "description": "Linear-style ops dashboard for agent orchestration. Real-time task board, calendar, project tracking, memories, docs, and team views.",
+    "status": "done",
+    "progress": 100,
+    "owner_agent_id": "mission-control",
+    "created_at": "2026-03-01T00:00:00Z",
+    "updated_at": "2026-03-02T21:32:00Z",
+    "roadmap_id": null,
+    "related_tasks": [],
+    "related_docs": [
+      "mission-control/SPEC.md",
+      "mission-control/BUILD_PLAN.md"
+    ],
+    "related_memories": []
+  },
+  {
+    "id": "proj-memory",
+    "name": "Memory Architecture 2.0",
+    "description": "Restructured memory from bloated Tier 1 to lean index + searchable Tier 2. Hybrid search (BM25 + vector), embedding cache, MMR, temporal decay.",
+    "status": "done",
+    "progress": 100,
+    "owner_agent_id": "mission-control",
+    "created_at": "2026-02-27T00:00:00Z",
+    "updated_at": "2026-02-28T00:00:00Z",
+    "roadmap_id": "R3",
+    "related_tasks": [],
+    "related_docs": [
+      "memory/projects.md"
+    ],
+    "related_memories": []
+  }
+]
