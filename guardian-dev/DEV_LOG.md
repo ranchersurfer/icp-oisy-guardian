@@ -1,5 +1,115 @@
 # Guardian Dev Log
 
+## 2026-03-04 — Phase 1b: Guardian Engine Canister Skeleton (Verified Complete)
+
+### Status: ✅ Phase 1b Deliverables Met
+### Tests: 55 unit tests in guardian_engine (was built during audit remediation)
+### WASM build: clean (6 warnings, 0 errors)
+
+### Verification Summary
+Phase 1b deliverables were already implemented during Phase 1a audit remediation (Opus audit pass). 
+Verified all required components exist and build cleanly:
+
+**Data Structures (✅)**
+- `UnifiedEvent` — chain, timestamp, direction, amount_usd, counterparty, tx_id (lib.rs:98)
+- `AlertRecord` — alert_id, timestamp, user, rules_triggered, severity, status (lib.rs:109)
+- `Watermark` — per-user per-chain tracking with `last_checked_id` and `last_block` (lib.rs:132)
+- `WatermarkKey` — 30-byte stable key: 29 bytes principal + 1 byte chain discriminant (lib.rs:153)
+
+**Timer Setup (✅)**
+- `timer_tick()` runs every 30s via `ic_cdk_timers::set_timer_interval` (lib.rs:343)
+- Loads user configs from Config Canister via inter-canister call
+- Per-user fetch cycle with watermark tracking for ICP, ckBTC, ckETH
+
+**Stable Storage (✅)**
+- `WATERMARKS: StableBTreeMap<WatermarkKey, Watermark, Memory>` (MemoryId 0)
+- `ALERTS: StableBTreeMap<String, AlertRecord, Memory>` (MemoryId 1) — ring-buffer capped at 1000/user
+- `META: StableBTreeMap<String, LastTick, Memory>` (MemoryId 2)
+- `USER_EVENTS: StableBTreeMap<WatermarkKey, Vec<u8>, Memory>` (MemoryId 3)
+- `SEEN_TX_IDS: StableBTreeMap<WatermarkKey, Vec<u8>, Memory>` (MemoryId 4)
+- `ALERT_QUEUE: StableBTreeMap<String, AlertQueueItem, Memory>` (MemoryId 5) — in alert_queue.rs
+
+**Health Check (✅)**
+- `get_health() -> EngineHealthStatus` query (lib.rs:656)
+- Returns: cycle balance, last timer run timestamp, user count, alert count
+
+**Security / Audit Hardening (✅)**
+- `post_upgrade` restarts timer (C2 fix)
+- `canister_inspect_message` rejects anonymous + oversized payloads (C4 fix)
+- `set_config_canister_id` restricted to controllers only (C3 fix)
+- All `from_bytes` use `unwrap_or_default()` or `expect()` (C5 fix)
+- MemoryManager with unique MemoryIds per map (C1 fix)
+
+**Unit Tests (✅ — 55 tests)**
+- Watermark read/write/roundtrip
+- WatermarkKey encoding/chain discriminants
+- Stable storage upgrade safety
+- Timer initialization (via start_timer extracted function)
+- Inter-canister error handling patterns
+- Seen-tx-ids deduplication and TTL eviction
+- Alert queue enqueue/dequeue
+- Health check cycle balance (no multiplication bug)
+- Rate limiting enforcement
+- Validation edge cases (NaN, infinity, bounds)
+
+**Files in guardian_engine:**
+- `src/lib.rs` (1368 lines) — core engine, timer, storage, health
+- `src/alert_queue.rs` — AlertQueueItem + ALERT_QUEUE stable map
+- `src/alerts.rs` — alert formatting/dispatch helpers
+- `src/canisters.rs` — canister IDs (ICP Index, ckBTC, ckETH ledgers)
+- `src/detector.rs` — rule evaluation (A1, A3, A4, A2 stub)
+- `src/fetcher.rs` — ICRC transaction fetching + watermark updates
+- `src/icrc.rs` — ICRC type definitions
+- `src/integration_tests.rs` — integration test stubs
+
+### Build Command
+```
+cargo build --target wasm32-unknown-unknown --release
+# Finished `release` profile [optimized] target(s) in 0.29s
+```
+
+---
+
+## 2026-03-04 — Pre-Testnet Hardening (External Feedback)
+
+### Commit: `1b58ca3`
+### Tests: 156 passed, 0 failed | WASM build: clean
+
+### TASK 1 — seen_tx_ids TTL eviction
+- Changed `SEEN_TX_IDS` storage type from `BTreeSet<String>` to `BTreeMap<String, u64>` (tx_id → timestamp_ns)
+- Updated `load_seen_tx_ids` / `save_seen_tx_ids` to use new type
+- Updated `store_user_events` signature to accept `now_ns: u64`; now records insertion timestamp per entry
+- TTL prune: `retain()` removes entries where `now - ts >= 86400s`; fallback cap removes oldest-by-timestamp if still over limit
+- Added tests: `test_seen_tx_ids_ttl_eviction`, `test_btreemap_dedup_logic`, updated `test_seen_tx_ids_bounded_at_max`
+
+### TASK 2 — Replace balance estimation with icrc1_balance_of
+- Added `ICP_LEDGER_CANISTER_ID`, `CKBTC_LEDGER_CANISTER_ID`, `CKETH_LEDGER_CANISTER_ID` to `canisters.rs`
+- Added `balance_e8s: Option<u64>` field to `DetectionContext` in `detector.rs`
+- `evaluate()` now uses `balance_e8s.unwrap_or(estimated_balance_e8s)` for A1
+- `run_fetch_cycle()` makes `icrc1_balance_of` inter-canister call on ICP ledger; falls back to estimation on failure
+- Added 4 tests for new ledger canister IDs
+
+### TASK 3 — Document/rename A2
+- Added `rule_a2_known_scam_address` stub in `detector.rs` returning `None`
+- Block comment explains Phase 3 deferral and OISY_GUARDIAN_SPEC section 6 numbering
+- A2 stub is called (then discarded) inside `evaluate()` to keep it reachable
+
+### TASK 4 — Alert queue structure
+- New file: `src/guardian_engine/src/alert_queue.rs`
+- `AlertQueueItem` struct with `alert_id`, `user`, `payload`, `retry_count`, `created_at`
+- `ALERT_QUEUE: StableBTreeMap<String, AlertQueueItem, Memory>` on MemoryId 5
+- `enqueue_alert()` / `dequeue_alerts(max)` / `queue_len()` functions
+- Engine now calls `enqueue_alert()` when `should_alert = true` instead of just logging
+- `Memory` type alias promoted to `pub(crate)` so `alert_queue.rs` can use it
+- `ALERT_QUEUE_MEM_ID = MemoryId::new(5)` — no conflict with existing IDs 0–4
+
+### Notes
+- All 156 tests pass (was 152 before this session, added 4 new tests)
+- WASM32 build: clean (warnings only, no errors)
+- `icrc1_balance_of` only queries ICP ledger in Phase 1; ckBTC/ckETH balance queries planned for Phase 2
+
+---
+
 ## 2026-03-04 — Opus Audit Remediation
 
 ### Audit Source
