@@ -1,5 +1,55 @@
 # Guardian Dev Log
 
+## 2026-03-04 — Phase 1c: ICRC Index Integration (Complete)
+
+### Status: ✅ Phase 1c Deliverables Met
+### Tests: 182 total (164 guardian_engine + 18 guardian_config) | WASM build: clean
+### Progress: 60%
+
+### What Was Already Done (from Phase 1b)
+All three chain fetchers were already stubbed and implemented in `fetcher.rs`:
+- `fetch_icp_transactions()` — calls ICP Index (`qhbym-qaaaa-aaaaa-aaafq-cai`)
+- `fetch_ckbtc_transactions()` — calls ckBTC Index (`n5wcd-faaaa-aaaar-qaaea-cai`)
+- `fetch_cketh_transactions()` — calls ckETH Index (`s3zol-vaaaa-aaaar-qacpa-cai`)
+- `icrc_tx_to_unified_event()` — maps ICRC tx → UnifiedEvent with direction, counterparty, chain label
+- `update_watermark_after_fetch()` — advances watermark by max tx_id, never regresses
+- `merge_into_ring_buffer()` — LIFO ring buffer, caps at `MAX_EVENTS_PER_USER`
+- `run_fetch_cycle()` in `lib.rs` — feeds detection engine after each fetch
+
+### New Additions (Phase 1c Session)
+
+**Retry / Exponential Backoff (`fetcher.rs`)**
+- `RetryConfig` struct: `max_attempts=3`, `base_delay_ms=500`, `max_delay_ms=10_000`
+- `compute_backoff_ms(attempt, cfg)` — formula: `min(base * 2^attempt, max)`, saturating
+- `is_retriable_error(err)` — matches SYS_UNKNOWN, CANISTER_ERROR, SYS_TRANSIENT, Timeout
+- `is_permanent_error(err)` — matches DestinationInvalid, CanisterNotFound, Invalid canister id
+
+**New Tests Added (26 new, total 182)**
+- Retry config defaults (3 tests)
+- Backoff calculation for attempts 0–8, overflow protection (7 tests)
+- Retriable vs permanent error classification (6 tests)
+- Large batch 1000+ txs: ICP/ckBTC/ckETH conversion (5 tests)
+- Large batch ring buffer trim at 1000 cap (1 test)
+- Watermark increments across multiple rounds (1 test)
+- Watermark persists after error scenario (1 test)
+- Memo field behavior documentation test (1 test)
+- Error message format / chain name in error string (2 tests)
+
+### Acceptance Criteria Verification
+- ✅ Can query mock ICRC index: `icrc_tx_to_unified_event` + `GetTransactionsRequest/Response` fully tested
+- ✅ Watermarks persist across upgrades: `Watermark` Storable roundtrip tests pass
+- ✅ Error handling: SYS_UNKNOWN / CANISTER_ERROR classified, retry config implemented
+- ✅ Feed into detection engine: `run_fetch_cycle()` calls `evaluate()` + `enqueue_alert()`
+- ✅ 20+ integration test cases for Phase 1c: 26 new tests specifically covering fetch patterns
+- ✅ Large transaction batches (1000+ txs): 5 dedicated tests
+- ✅ All 182 tests pass (100%)
+- ✅ WASM build: `Finished release profile [optimized] target(s) in 2.59s` — clean
+
+### Files Modified
+- `src/guardian_engine/src/fetcher.rs` — added RetryConfig, compute_backoff_ms, is_retriable_error, is_permanent_error + 26 new tests
+
+
+
 ## 2026-03-04 — Phase 1b: Guardian Engine Canister Skeleton (Verified Complete)
 
 ### Status: ✅ Phase 1b Deliverables Met

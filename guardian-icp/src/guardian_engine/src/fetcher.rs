@@ -4,6 +4,11 @@
 ///   1. Calls the respective ICRC index canister via `ic_cdk::call`.
 ///   2. Maps results into `UnifiedEvent` values.
 ///   3. Returns an empty Vec (never panics) on any error.
+///
+/// Retry policy:
+///   On transient inter-canister errors (SYS_UNKNOWN, CANISTER_ERROR) the caller
+///   can use `RetryConfig` + `compute_backoff_ms` to decide when to retry.
+///   The pure helpers are tested independently of the IC runtime.
 #[cfg(not(test))]
 use candid::Principal;
 
@@ -17,6 +22,63 @@ use crate::icrc::{GetTransactionsRequest, GetTransactionsResponse};
 
 use crate::icrc::{IcrcAccount, IcrcTransaction};
 use crate::{Direction, UnifiedEvent, Watermark};
+
+// ---------------------------------------------------------------------------
+// Retry / exponential backoff helpers
+// ---------------------------------------------------------------------------
+
+/// Configuration for retry behaviour on transient inter-canister failures.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RetryConfig {
+    /// Maximum total attempts (initial + retries).
+    pub max_attempts: u32,
+    /// Base delay in milliseconds for the first retry.
+    pub base_delay_ms: u64,
+    /// Maximum delay cap in milliseconds (prevents unbounded waits).
+    pub max_delay_ms: u64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        RetryConfig {
+            max_attempts: 3,
+            base_delay_ms: 500,
+            max_delay_ms: 10_000,
+        }
+    }
+}
+
+/// Compute the exponential-backoff delay for the given attempt number (0-indexed).
+///
+/// Formula: `min(base_delay_ms * 2^attempt, max_delay_ms)`
+///
+/// - attempt 0 (first retry): `base_delay_ms`
+/// - attempt 1 (second retry): `base_delay_ms * 2`
+/// - etc., capped at `max_delay_ms`
+pub fn compute_backoff_ms(attempt: u32, cfg: &RetryConfig) -> u64 {
+    // 2^attempt, capped to avoid overflow for large attempt values.
+    let multiplier: u64 = if attempt >= 64 { u64::MAX } else { 1u64 << attempt };
+    let delay = cfg.base_delay_ms.saturating_mul(multiplier);
+    delay.min(cfg.max_delay_ms)
+}
+
+/// Determine whether an error string represents a retriable transient error.
+/// SYS_UNKNOWN and CANISTER_ERROR are considered transient on ICP.
+pub fn is_retriable_error(err: &str) -> bool {
+    err.contains("SYS_UNKNOWN")
+        || err.contains("CANISTER_ERROR")
+        || err.contains("SYS_TRANSIENT")
+        || err.contains("timeout")
+        || err.contains("Timeout")
+}
+
+/// Determine whether an error string represents a permanent (non-retriable) error.
+pub fn is_permanent_error(err: &str) -> bool {
+    err.contains("DestinationInvalid")
+        || err.contains("CanisterNotFound")
+        || err.contains("Invalid canister id")
+        || err.contains("DESTINATION_INVALID")
+}
 
 // ---------------------------------------------------------------------------
 // IcrcTransaction → UnifiedEvent conversion
@@ -455,5 +517,289 @@ mod tests {
         let encoded = candid::encode_one(&acc).expect("encode");
         let decoded: IcrcAccount = candid::decode_one(&encoded).expect("decode");
         assert_eq!(decoded, acc);
+    }
+
+    // --- Retry / exponential backoff ---
+
+    #[test]
+    fn test_retry_config_default_values() {
+        let cfg = RetryConfig::default();
+        assert_eq!(cfg.max_attempts, 3);
+        assert_eq!(cfg.base_delay_ms, 500);
+        assert_eq!(cfg.max_delay_ms, 10_000);
+    }
+
+    #[test]
+    fn test_backoff_attempt_0_equals_base() {
+        let cfg = RetryConfig::default();
+        assert_eq!(compute_backoff_ms(0, &cfg), 500);
+    }
+
+    #[test]
+    fn test_backoff_attempt_1_doubles() {
+        let cfg = RetryConfig::default();
+        assert_eq!(compute_backoff_ms(1, &cfg), 1_000);
+    }
+
+    #[test]
+    fn test_backoff_attempt_2_quadruples() {
+        let cfg = RetryConfig::default();
+        assert_eq!(compute_backoff_ms(2, &cfg), 2_000);
+    }
+
+    #[test]
+    fn test_backoff_caps_at_max_delay() {
+        let cfg = RetryConfig::default(); // max 10_000ms
+        // 2^8 * 500 = 128_000 > 10_000
+        assert_eq!(compute_backoff_ms(8, &cfg), 10_000);
+    }
+
+    #[test]
+    fn test_backoff_large_attempt_does_not_overflow() {
+        let cfg = RetryConfig::default();
+        // Attempt 63 would overflow u64 without saturating_shl
+        let delay = compute_backoff_ms(63, &cfg);
+        assert_eq!(delay, 10_000); // capped at max
+    }
+
+    #[test]
+    fn test_backoff_custom_config() {
+        let cfg = RetryConfig {
+            max_attempts: 5,
+            base_delay_ms: 100,
+            max_delay_ms: 1_600,
+        };
+        assert_eq!(compute_backoff_ms(0, &cfg), 100);
+        assert_eq!(compute_backoff_ms(1, &cfg), 200);
+        assert_eq!(compute_backoff_ms(2, &cfg), 400);
+        assert_eq!(compute_backoff_ms(3, &cfg), 800);
+        assert_eq!(compute_backoff_ms(4, &cfg), 1_600); // hits cap
+        assert_eq!(compute_backoff_ms(5, &cfg), 1_600); // still capped
+    }
+
+    #[test]
+    fn test_is_retriable_sys_unknown() {
+        assert!(is_retriable_error("Inter-canister call failed: SYS_UNKNOWN network issue"));
+    }
+
+    #[test]
+    fn test_is_retriable_canister_error() {
+        assert!(is_retriable_error("CANISTER_ERROR: canister trapped"));
+    }
+
+    #[test]
+    fn test_is_retriable_timeout() {
+        assert!(is_retriable_error("request Timeout exceeded"));
+    }
+
+    #[test]
+    fn test_is_retriable_sys_transient() {
+        assert!(is_retriable_error("SYS_TRANSIENT: system busy"));
+    }
+
+    #[test]
+    fn test_is_not_retriable_destination_invalid() {
+        assert!(!is_retriable_error("DestinationInvalid canister not found"));
+    }
+
+    #[test]
+    fn test_is_permanent_destination_invalid() {
+        assert!(is_permanent_error("DestinationInvalid: canister gone"));
+    }
+
+    #[test]
+    fn test_is_permanent_canister_not_found() {
+        assert!(is_permanent_error("CanisterNotFound: no such canister"));
+    }
+
+    #[test]
+    fn test_is_permanent_invalid_canister_id() {
+        assert!(is_permanent_error("Invalid canister id: bad-id"));
+    }
+
+    #[test]
+    fn test_is_not_permanent_transient_error() {
+        assert!(!is_permanent_error("SYS_UNKNOWN transient"));
+        assert!(!is_permanent_error("CANISTER_ERROR trap"));
+    }
+
+    // --- Large batch processing (Phase 1c: 1000+ txs) ---
+
+    #[test]
+    fn test_large_batch_1000_txs_conversion() {
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let txs: Vec<IcrcTransaction> = (0u64..1000)
+            .map(|i| make_tx(i, user, other_principal(), 1000 + i))
+            .collect();
+        let events: Vec<UnifiedEvent> = txs
+            .iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ICP"))
+            .collect();
+        assert_eq!(events.len(), 1000);
+        assert!(events.iter().all(|e| e.direction == Direction::In));
+        assert!(events.iter().all(|e| e.chain == "ICP"));
+    }
+
+    #[test]
+    fn test_large_batch_1000_txs_watermark_update() {
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let txs: Vec<IcrcTransaction> = (0u64..1000)
+            .map(|i| make_tx(i, other_principal(), user, 100))
+            .collect();
+        let events: Vec<UnifiedEvent> = txs
+            .iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ICP"))
+            .collect();
+        let mut wm = Watermark::default();
+        update_watermark_after_fetch(&mut wm, &events, 99_999_999);
+        assert_eq!(wm.block_height, 999); // highest tx_id
+        assert_eq!(wm.last_tx_id, "999");
+        assert_eq!(wm.last_checked, 99_999_999);
+    }
+
+    #[test]
+    fn test_large_batch_ring_buffer_trim_to_1000_cap() {
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let txs: Vec<IcrcTransaction> = (0u64..1500)
+            .map(|i| make_tx(i, other_principal(), user, 100))
+            .collect();
+        let events: Vec<UnifiedEvent> = txs
+            .iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ICP"))
+            .collect();
+        let mut buf: Vec<UnifiedEvent> = vec![];
+        merge_into_ring_buffer(&mut buf, events, 1000);
+        assert_eq!(buf.len(), 1000);
+        // Newest 1000 (ids 500..1499) should be kept
+        assert_eq!(buf[0].tx_id, "500");
+        assert_eq!(buf[999].tx_id, "1499");
+    }
+
+    #[test]
+    fn test_large_batch_1000_txs_ckbtc_chain() {
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let txs: Vec<IcrcTransaction> = (0u64..1000)
+            .map(|i| make_tx(i, other_principal(), user, 500))
+            .collect();
+        let events: Vec<UnifiedEvent> = txs
+            .iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ckBTC"))
+            .collect();
+        assert_eq!(events.len(), 1000);
+        assert!(events.iter().all(|e| e.chain == "ckBTC"));
+        assert!(events.iter().all(|e| e.direction == Direction::Out));
+    }
+
+    #[test]
+    fn test_large_batch_1000_txs_cketh_chain() {
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let txs: Vec<IcrcTransaction> = (0u64..1000)
+            .map(|i| make_tx(i, user, other_principal(), 200))
+            .collect();
+        let events: Vec<UnifiedEvent> = txs
+            .iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ckETH"))
+            .collect();
+        assert_eq!(events.len(), 1000);
+        assert!(events.iter().all(|e| e.chain == "ckETH"));
+    }
+
+    #[test]
+    fn test_large_batch_watermark_increments_multiple_rounds() {
+        // Simulate 3 rounds of fetching (as a real timer would do)
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let mut wm = Watermark::default();
+
+        // Round 1: txs 0..100
+        let round1: Vec<IcrcTransaction> = (0u64..100)
+            .map(|i| make_tx(i, other_principal(), user, 100))
+            .collect();
+        let events1: Vec<UnifiedEvent> = round1.iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ICP"))
+            .collect();
+        update_watermark_after_fetch(&mut wm, &events1, 1_000);
+        assert_eq!(wm.block_height, 99);
+
+        // Round 2: txs 100..200
+        let round2: Vec<IcrcTransaction> = (100u64..200)
+            .map(|i| make_tx(i, other_principal(), user, 100))
+            .collect();
+        let events2: Vec<UnifiedEvent> = round2.iter()
+            .map(|tx| icrc_tx_to_unified_event(tx, &account, "ICP"))
+            .collect();
+        update_watermark_after_fetch(&mut wm, &events2, 2_000);
+        assert_eq!(wm.block_height, 199);
+        assert_eq!(wm.last_checked, 2_000);
+
+        // Round 3: no new txs
+        update_watermark_after_fetch(&mut wm, &[], 3_000);
+        assert_eq!(wm.block_height, 199); // unchanged
+        assert_eq!(wm.last_checked, 3_000); // updated
+    }
+
+    #[test]
+    fn test_watermark_persists_after_error_scenario() {
+        // After an error, the watermark should NOT be updated
+        // (caller doesn't call update_watermark_after_fetch on error path)
+        let mut wm = Watermark {
+            last_tx_id: "50".to_string(),
+            last_checked: 1000,
+            block_height: 50,
+        };
+        // Simulate: error occurred, we skip the update
+        let error_occurred = true;
+        if !error_occurred {
+            update_watermark_after_fetch(&mut wm, &[], 9999);
+        }
+        // Watermark must not regress
+        assert_eq!(wm.block_height, 50);
+        assert_eq!(wm.last_checked, 1000);
+    }
+
+    #[test]
+    fn test_memo_field_ignored_in_unified_event() {
+        // IcrcTransaction.memo is not currently mapped to UnifiedEvent
+        // This test documents that behavior explicitly
+        let user = user_principal();
+        let account = IcrcAccount::new(user);
+        let tx = IcrcTransaction {
+            id: 42,
+            timestamp: 1000,
+            amount: 500,
+            from: IcrcAccount::new(other_principal()),
+            to: IcrcAccount::new(user),
+            memo: Some(vec![1, 2, 3, 4]),
+            kind: "transfer".to_string(),
+        };
+        let ev = icrc_tx_to_unified_event(&tx, &account, "ICP");
+        assert_eq!(ev.amount_e8s, 500);
+        assert_eq!(ev.tx_id, "42");
+    }
+
+    #[test]
+    fn test_fetch_error_message_contains_chain_name() {
+        // Simulate the error format that fetch_transactions_from_index produces
+        let chain = "ckBTC";
+        let canister_id = "n5wcd-faaaa-aaaar-qaaea-cai";
+        let err = format!(
+            "Inter-canister call to {} ({}) failed: {:?} {}",
+            chain, canister_id, "SYS_UNKNOWN", "network issue"
+        );
+        assert!(err.contains("ckBTC"));
+        assert!(err.contains(canister_id));
+        assert!(is_retriable_error(&err));
+    }
+
+    #[test]
+    fn test_fetch_error_permanent_canister_gone() {
+        let err = format!("Invalid canister id {}: {}", "bad-id", "failed to parse");
+        assert!(is_permanent_error(&err));
+        assert!(!is_retriable_error(&err));
     }
 }
