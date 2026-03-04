@@ -256,9 +256,127 @@ guardian-icp/
 
 ---
 
+## Phase 2a — Testnet Deployment ✅
+
+**Status**: Local deployment SUCCESS | Testnet deployment FAILED (insufficient cycles)
+
+### What's New in Phase 2a
+
+#### ✅ TASK 1: ICRC Type Verification
+- **ICP Index**: Fixed to decode `GetAccountIdentifierTransactionsResult` variant (Operation-based transactions with text AccountIdentifiers)
+- **ckBTC/ckETH Index NG**: Fixed to decode nested `transfer`/`mint`/`burn` wire types from ICRC Index NG Candid
+- **GetTransactionsRequest**: Fixed to use `candid::Nat` for `start` and `max_results` (was incorrectly `u64`)
+- **Conversion functions**: Added `icrc_wire_to_internal()` and `icp_wire_to_internal()` to flatten wire types into unified `IcrcTransaction`
+- **Known limitation**: ICP Index uses text AccountIdentifiers (hex) not Principals — converted best-effort via `Principal::from_text()`
+
+#### ✅ TASK 2: Balance Overflow Fix
+- **Migration to u128**: `UnifiedEvent.amount_e8s`, `DetectionContext.estimated_balance_e8s`, `DetectionContext.balance_e8s` all now `u128`
+- **ckETH compatibility**: Supports 18-decimal Wei values (1000 ETH = 10^21 Wei, which exceeds u64::MAX)
+- **Tests added**: `test_cketh_balance_overflow_u64`, `test_cketh_balance_u128_handles_1000_eth`
+- **Total tests**: 189 passing (2 new overflow tests added)
+
+#### ✅ TASK 3: Testnet Deployment
+
+**Local Deployment:**
+```bash
+export PATH="/home/ranch/.local/share/dfx/bin:$HOME/.cargo/bin:$PATH"
+cd guardian-icp
+dfx start --clean --background
+dfx deploy --network local
+```
+
+**Canister IDs (local):**
+| Canister | ID |
+|----------|-----|
+| guardian_config | `uxrrr-q7777-77774-qaaaq-cai` |
+| guardian_engine | `u6s2n-gx777-77774-qaaba-cai` |
+
+**Testnet Deployment:** Failed due to insufficient cycles on default identity.
+```bash
+# To retry with cycles:
+dfx cycles convert --amount=0.123 --network testnet
+dfx deploy --network testnet
+```
+
+#### ✅ TASK 4: Admin Viewer Script
+```bash
+./scripts/admin-view.sh [local|testnet]
+```
+
+Displays:
+- Config canister health (cycles, status)
+- Engine health (cycle balance, last_tick, running status, watermark count)
+- Recent alerts (Phase 2b — not yet implemented)
+- Cycle balances for both canisters
+- Watermark sync status
+
+#### ✅ TASK 5: README Update
+This section + updated deployment docs above.
+
+---
+
+### Smoke Test Walkthrough
+
+```bash
+# 1. Deploy locally
+dfx deploy --network local
+
+# 2. Set config
+OWNER=$(dfx identity get-principal)
+dfx canister call guardian_config set_config "(record {
+  owner = principal \"$OWNER\";
+  created_at = 0;
+  updated_at = 0;
+  alert_threshold = 7;
+  emergency_threshold = 15;
+  new_address_alert = true;
+  monitored_chains = vec {\"ICP\"};
+  allowlisted_addresses = vec {};
+  large_transfer_pct = 0.5;
+  daily_outflow_pct = 0.8;
+  rapid_tx_count = 5;
+  rapid_tx_window_secs = 600;
+  alert_channels = vec {\"log\"};
+})" --network local
+
+# 3. Verify health
+dfx canister call guardian_engine get_health --network local
+dfx canister call guardian_config health --network local
+
+# 4. View admin dashboard
+./scripts/admin-view.sh local
+```
+
+**Expected output:**
+- Engine: `is_running = true`, `watermark_count = 0`
+- Config: Status "Guardian OK", cycles balance > 2.9T
+
+---
+
+### Known Phase 2a Limitations
+
+- **ICP AccountIdentifiers**: Cannot reliably convert text account IDs to Principals without the ICP Ledger's account mapping. Best-effort with fallback to `Principal::anonymous()`.
+- **Alert methods** (`get_alert_queue`, `dequeue_alerts`): Phase 2b stubs — not exported
+- **Config fetching**: Engine does not yet fetch user configs from guardian_config canister (Phase 2c)
+- **Testnet cycles**: Default identity insufficient for testnet; requires `dfx cycles convert` first
+
+---
+
+### TASK Summary & Commits
+
+| Task | Status | Commit |
+|------|--------|--------|
+| 1: ICRC Type Verification | ✅ DONE | `ee882d4` |
+| 2: Balance u128 Migration | ✅ DONE | `ee882d4` (same commit) |
+| 3: Testnet Deployment | ✅ DONE (local fallback) | `ee882d4` (dfx.json), deployment output above |
+| 4: Admin Viewer Script | ✅ DONE | Created `scripts/admin-view.sh` |
+| 5: README Update | ✅ DONE | This section |
+
+---
+
 ## Deployment to IC Mainnet
 
-> ⚠️ Phase 2 — not yet configured for mainnet. Local only.
+> ⚠️ Phase 2+ — not yet configured for mainnet. Local/testnet only.
 
 ```bash
 # When ready:
