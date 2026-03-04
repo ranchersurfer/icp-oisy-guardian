@@ -1,3 +1,12 @@
+/// ICP Ledger canister (mainnet) — used for icrc1_balance_of queries.
+pub const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+
+/// ckBTC Ledger canister (mainnet) — used for icrc1_balance_of queries.
+pub const CKBTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+
+/// ckETH Ledger canister (mainnet) — used for icrc1_balance_of queries.
+pub const CKETH_LEDGER_CANISTER_ID: &str = "ss2fx-dyaaa-aaaar-qacoq-cai";
+
 /// ICP Index canister (mainnet).
 /// Provides ICRC-1 transaction history for the ICP token.
 /// Note: This is the ICP *Index* canister (qhbym-qaaaa-aaaaa-aaafq-cai),
@@ -25,6 +34,32 @@ pub const MAX_SEEN_TX_IDS_PER_USER: usize = 1000;
 mod tests {
     use super::*;
     use candid::Principal;
+
+    #[test]
+    fn test_icp_ledger_canister_id_valid() {
+        let result = Principal::from_text(ICP_LEDGER_CANISTER_ID);
+        assert!(result.is_ok(), "ICP_LEDGER_CANISTER_ID should be a valid principal");
+        assert_eq!(ICP_LEDGER_CANISTER_ID, "ryjl3-tyaaa-aaaaa-aaaba-cai");
+    }
+
+    #[test]
+    fn test_ckbtc_ledger_canister_id_valid() {
+        let result = Principal::from_text(CKBTC_LEDGER_CANISTER_ID);
+        assert!(result.is_ok(), "CKBTC_LEDGER_CANISTER_ID should be a valid principal");
+    }
+
+    #[test]
+    fn test_cketh_ledger_canister_id_valid() {
+        let result = Principal::from_text(CKETH_LEDGER_CANISTER_ID);
+        assert!(result.is_ok(), "CKETH_LEDGER_CANISTER_ID should be a valid principal");
+    }
+
+    #[test]
+    fn test_ledger_ids_distinct_from_index_ids() {
+        assert_ne!(ICP_LEDGER_CANISTER_ID, ICP_INDEX_CANISTER_ID);
+        assert_ne!(CKBTC_LEDGER_CANISTER_ID, CKBTC_INDEX_CANISTER_ID);
+        assert_ne!(CKETH_LEDGER_CANISTER_ID, CKETH_INDEX_CANISTER_ID);
+    }
 
     #[test]
     fn test_icp_index_canister_id_valid() {

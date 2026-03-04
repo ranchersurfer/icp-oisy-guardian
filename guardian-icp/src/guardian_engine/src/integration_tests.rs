@@ -55,6 +55,7 @@ mod integration_tests {
         DetectionContext {
             events,
             estimated_balance_e8s: balance,
+            balance_e8s: None,
             allowlisted_addresses: allowlist,
             alert_threshold: threshold,
         }

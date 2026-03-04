@@ -1,3 +1,4 @@
+pub mod alert_queue;
 pub mod alerts;
 pub mod canisters;
 pub mod detector;
@@ -14,7 +15,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use alerts::format_alert;
 use canisters::{MAX_EVENTS_PER_USER, MAX_SEEN_TX_IDS_PER_USER};
@@ -35,7 +36,7 @@ pub const MIN_CYCLE_BALANCE_PUB: u64 = MIN_CYCLE_BALANCE;
 // ---------------------------------------------------------------------------
 
 /// Type alias for virtual memory backed by DefaultMemoryImpl.
-type Memory = VirtualMemory<DefaultMemoryImpl>;
+pub(crate) type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 /// Memory region IDs — each StableBTreeMap must have a unique MemoryId.
 const WATERMARKS_MEM_ID: MemoryId = MemoryId::new(0);
@@ -261,7 +262,7 @@ thread_local! {
         ));
 
     /// H3 Fix: Per-user seen tx IDs for deduplication.
-    /// WatermarkKey (chain byte = 0xFE) → candid-encoded BTreeSet<String>
+    /// WatermarkKey (chain byte = 0xFE) → candid-encoded BTreeMap<String, u64>
     static SEEN_TX_IDS: RefCell<StableBTreeMap<WatermarkKey, Vec<u8>, Memory>> =
         RefCell::new(StableBTreeMap::new(
             MEMORY_MANAGER.with(|mm| mm.borrow().get(SEEN_TX_IDS_MEM_ID))
@@ -394,7 +395,7 @@ async fn run_fetch_cycle(now_ns: u64) {
                 let mut updated_wm = icp_wm.clone();
                 update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
                 WATERMARKS.with(|w| w.borrow_mut().insert(icp_wm_key, updated_wm));
-                store_user_events(&principal, events);
+                store_user_events(&principal, events, now_ns);
             }
             Err(e) => ic_cdk::println!("ICP fetch error for {:?}: {}", principal, e),
         }
@@ -407,7 +408,7 @@ async fn run_fetch_cycle(now_ns: u64) {
                 let mut updated_wm = ckbtc_wm.clone();
                 update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
                 WATERMARKS.with(|w| w.borrow_mut().insert(ckbtc_wm_key, updated_wm));
-                store_user_events(&principal, events);
+                store_user_events(&principal, events, now_ns);
             }
             Err(e) => ic_cdk::println!("ckBTC fetch error for {:?}: {}", principal, e),
         }
@@ -420,16 +421,34 @@ async fn run_fetch_cycle(now_ns: u64) {
                 let mut updated_wm = cketh_wm.clone();
                 update_watermark_after_fetch(&mut updated_wm, &events, now_ns);
                 WATERMARKS.with(|w| w.borrow_mut().insert(cketh_wm_key, updated_wm));
-                store_user_events(&principal, events);
+                store_user_events(&principal, events, now_ns);
             }
             Err(e) => ic_cdk::println!("ckETH fetch error for {:?}: {}", principal, e),
         }
+
+        // --- Balance query: replace tx-history estimation with icrc1_balance_of ---
+        // Try ICP ledger first; on failure fall back to estimation from tx history.
+        let icp_ledger = candid::Principal::from_text(canisters::ICP_LEDGER_CANISTER_ID)
+            .expect("ICP_LEDGER_CANISTER_ID is a valid principal");
+        let balance_e8s: Option<u64> = match ic_cdk::call::<(IcrcAccount,), (candid::Nat,)>(
+            icp_ledger,
+            "icrc1_balance_of",
+            (account.clone(),),
+        )
+        .await
+        {
+            Ok((nat,)) => nat.0.try_into().ok(),
+            Err(e) => {
+                ic_cdk::println!("icrc1_balance_of failed for {:?}: {:?}", principal, e);
+                None // fall back to estimation below
+            }
+        };
 
         // --- Detection engine ---
         // Load all stored events for this user and run rule evaluation.
         let user_events = load_user_events(&principal);
         if !user_events.is_empty() {
-            // Estimate balance: sum of incoming minus sum of outgoing (floor 0)
+            // Fallback balance estimate: sum(In) - sum(Out), used when balance_e8s is None
             let total_in: u64 = user_events.iter()
                 .filter(|e| e.direction == Direction::In)
                 .map(|e| e.amount_e8s)
@@ -447,6 +466,7 @@ async fn run_fetch_cycle(now_ns: u64) {
             let ctx = DetectionContext {
                 events: &user_events,
                 estimated_balance_e8s: estimated_balance,
+                balance_e8s, // actual balance from ledger, or None on failure
                 allowlisted_addresses: &allowlisted,
                 alert_threshold,
             };
@@ -455,9 +475,20 @@ async fn run_fetch_cycle(now_ns: u64) {
 
             if result.should_alert {
                 let severity_str = result.severity.as_str().to_string();
-                let payload = format_alert(principal, result, user_events, now_ns);
+                let payload = format_alert(principal, result, user_events.clone(), now_ns);
                 ic_cdk::println!("ALERT: {} for {:?} (alert_id={})", severity_str, principal, payload.alert_id);
-                // TODO Phase 2: HTTPS outcall to notify external channel
+
+                // Enqueue for Phase 2b HTTPS outcall delivery
+                alert_queue::enqueue_alert(alert_queue::AlertQueueItem {
+                    alert_id: payload.alert_id.clone(),
+                    user: principal,
+                    payload: format!(
+                        "severity={} score={} rules={:?}",
+                        payload.severity, payload.severity_score, payload.rules_triggered
+                    ),
+                    retry_count: 0,
+                    created_at: now_ns,
+                });
             }
         }
     }
@@ -484,19 +515,19 @@ fn seen_tx_ids_key(principal: &Principal) -> WatermarkKey {
     WatermarkKey(key)
 }
 
-/// H3 Fix: Load the set of already-seen tx IDs for a user.
-fn load_seen_tx_ids(principal: &Principal) -> BTreeSet<String> {
+/// H3 Fix: Load the map of already-seen tx IDs → insertion timestamp (ns) for a user.
+fn load_seen_tx_ids(principal: &Principal) -> BTreeMap<String, u64> {
     let key = seen_tx_ids_key(principal);
     SEEN_TX_IDS.with(|s| {
         s.borrow()
             .get(&key)
-            .and_then(|b| candid::decode_one::<BTreeSet<String>>(&b).ok())
+            .and_then(|b| candid::decode_one::<BTreeMap<String, u64>>(&b).ok())
             .unwrap_or_default()
     })
 }
 
-/// H3 Fix: Persist the seen tx IDs for a user (bounded to MAX_SEEN_TX_IDS_PER_USER).
-fn save_seen_tx_ids(principal: &Principal, ids: &BTreeSet<String>) {
+/// H3 Fix: Persist the seen tx ID map for a user (bounded to MAX_SEEN_TX_IDS_PER_USER).
+fn save_seen_tx_ids(principal: &Principal, ids: &BTreeMap<String, u64>) {
     let key = seen_tx_ids_key(principal);
     let encoded = candid::encode_one(ids).unwrap_or_default();
     SEEN_TX_IDS.with(|s| s.borrow_mut().insert(key, encoded));
@@ -504,34 +535,43 @@ fn save_seen_tx_ids(principal: &Principal, ids: &BTreeSet<String>) {
 
 /// Merge `new_events` into the per-user ring buffer in stable memory.
 /// H3 Fix: Deduplicates events by tx_id before merging.
-fn store_user_events(principal: &Principal, new_events: Vec<UnifiedEvent>) {
+/// TTL Fix: Prunes seen tx IDs older than 24 hours to prevent unbounded growth.
+fn store_user_events(principal: &Principal, new_events: Vec<UnifiedEvent>, now_ns: u64) {
     if new_events.is_empty() {
         return;
     }
+
+    const TTL_NS: u64 = 86_400 * 1_000_000_000; // 24 hours in nanoseconds
 
     // H3 Fix: Filter out already-seen tx IDs
     let mut seen = load_seen_tx_ids(principal);
     let deduplicated: Vec<UnifiedEvent> = new_events
         .into_iter()
-        .filter(|e| !seen.contains(&e.tx_id))
+        .filter(|e| !seen.contains_key(&e.tx_id))
         .collect();
 
     if deduplicated.is_empty() {
         return;
     }
 
-    // Record the new tx IDs, trimming to the max bound
+    // Record the new tx IDs with their insertion timestamp
     for e in &deduplicated {
-        seen.insert(e.tx_id.clone());
+        seen.insert(e.tx_id.clone(), now_ns);
     }
-    // If we exceed the cap, remove the oldest entries (BTreeSet is sorted; remove from front)
-    while seen.len() > MAX_SEEN_TX_IDS_PER_USER {
-        if let Some(oldest) = seen.iter().next().cloned() {
-            seen.remove(&oldest);
-        } else {
-            break;
+
+    // TTL Fix: prune entries older than 24 hours
+    seen.retain(|_, ts| now_ns.saturating_sub(*ts) < TTL_NS);
+
+    // Fallback cap: if still above limit after TTL prune, remove oldest by timestamp
+    if seen.len() > MAX_SEEN_TX_IDS_PER_USER {
+        let mut by_age: Vec<(String, u64)> = seen.iter().map(|(k, &v)| (k.clone(), v)).collect();
+        by_age.sort_by_key(|(_, ts)| *ts);
+        let to_remove = by_age.len() - MAX_SEEN_TX_IDS_PER_USER;
+        for (k, _) in by_age.into_iter().take(to_remove) {
+            seen.remove(&k);
         }
     }
+
     save_seen_tx_ids(principal, &seen);
 
     let key = user_events_key(principal);
@@ -889,31 +929,54 @@ mod tests {
     }
 
     #[test]
-    fn test_btreeset_dedup_logic() {
-        // Verify BTreeSet correctly deduplicates tx IDs
-        let mut seen: BTreeSet<String> = BTreeSet::new();
-        seen.insert("tx-1".to_string());
-        seen.insert("tx-2".to_string());
-        seen.insert("tx-1".to_string()); // duplicate
+    fn test_btreemap_dedup_logic() {
+        // Verify BTreeMap correctly deduplicates tx IDs (second insert overwrites)
+        let mut seen: BTreeMap<String, u64> = BTreeMap::new();
+        seen.insert("tx-1".to_string(), 1000);
+        seen.insert("tx-2".to_string(), 2000);
+        seen.insert("tx-1".to_string(), 3000); // overwrite, not duplicate
 
         assert_eq!(seen.len(), 2);
-        assert!(seen.contains("tx-1"));
-        assert!(seen.contains("tx-2"));
+        assert!(seen.contains_key("tx-1"));
+        assert!(seen.contains_key("tx-2"));
+    }
+
+    #[test]
+    fn test_seen_tx_ids_ttl_eviction() {
+        // Entries older than 24h should be pruned
+        const TTL_NS: u64 = 86_400 * 1_000_000_000;
+        let now_ns: u64 = 200_000 * 1_000_000_000; // arbitrary "now"
+
+        let mut seen: BTreeMap<String, u64> = BTreeMap::new();
+        // Old entry: created 25h ago (should be pruned)
+        seen.insert("old-tx".to_string(), now_ns - TTL_NS - 1);
+        // Recent entry: created 1h ago (should survive)
+        seen.insert("new-tx".to_string(), now_ns - 3_600 * 1_000_000_000);
+
+        // Apply TTL prune (same logic as store_user_events)
+        seen.retain(|_, ts| now_ns.saturating_sub(*ts) < TTL_NS);
+
+        assert_eq!(seen.len(), 1, "Only the recent tx should survive");
+        assert!(!seen.contains_key("old-tx"));
+        assert!(seen.contains_key("new-tx"));
     }
 
     #[test]
     fn test_seen_tx_ids_bounded_at_max() {
-        // Verify that we can enforce the MAX_SEEN_TX_IDS_PER_USER bound
-        let mut seen: BTreeSet<String> = BTreeSet::new();
+        // Verify that we can enforce the MAX_SEEN_TX_IDS_PER_USER fallback cap
+        let now_ns = 1_000_000_000_000u64;
+        let mut seen: BTreeMap<String, u64> = BTreeMap::new();
         for i in 0..MAX_SEEN_TX_IDS_PER_USER + 5 {
-            seen.insert(format!("tx-{:05}", i));
+            seen.insert(format!("tx-{:05}", i), now_ns + i as u64);
         }
-        // Trim to bound
-        while seen.len() > MAX_SEEN_TX_IDS_PER_USER {
-            if let Some(oldest) = seen.iter().next().cloned() {
-                seen.remove(&oldest);
-            } else {
-                break;
+        // Apply fallback cap: remove oldest by timestamp
+        if seen.len() > MAX_SEEN_TX_IDS_PER_USER {
+            let mut by_age: Vec<(String, u64)> =
+                seen.iter().map(|(k, &v)| (k.clone(), v)).collect();
+            by_age.sort_by_key(|(_, ts)| *ts);
+            let to_remove = by_age.len() - MAX_SEEN_TX_IDS_PER_USER;
+            for (k, _) in by_age.into_iter().take(to_remove) {
+                seen.remove(&k);
             }
         }
         assert_eq!(seen.len(), MAX_SEEN_TX_IDS_PER_USER);
@@ -1113,6 +1176,7 @@ mod tests {
             DetectionContext {
                 events,
                 estimated_balance_e8s: balance,
+                balance_e8s: None,
                 allowlisted_addresses: allowlist,
                 alert_threshold: threshold,
             }

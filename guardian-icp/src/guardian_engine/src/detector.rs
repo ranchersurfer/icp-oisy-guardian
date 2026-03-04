@@ -178,12 +178,28 @@ pub fn rule_a4_new_address(
 }
 
 // ---------------------------------------------------------------------------
+// A2 — Known scam address matching (planned Phase 3: requires on-chain scam address registry)
+// Skipped in Phase 1 MVP. Rules are numbered per OISY_GUARDIAN_SPEC section 6.
+// ---------------------------------------------------------------------------
+
+/// Stub for A2 — returns None until Phase 3 on-chain scam registry is implemented.
+#[allow(dead_code)]
+pub fn rule_a2_known_scam_address(_events: &[UnifiedEvent]) -> Option<RuleMatch> {
+    // A2 — Known scam address matching (planned Phase 3: requires on-chain scam address registry)
+    // Skipped in Phase 1 MVP. Rules are numbered per OISY_GUARDIAN_SPEC section 6.
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Evaluate all rules → DetectionResult
 // ---------------------------------------------------------------------------
 
 pub struct DetectionContext<'a> {
     pub events: &'a [UnifiedEvent],
     pub estimated_balance_e8s: u64,
+    /// Actual balance from icrc1_balance_of, if the call succeeded.
+    /// When present, used instead of estimated_balance_e8s for A1 evaluation.
+    pub balance_e8s: Option<u64>,
     pub allowlisted_addresses: &'a [String],
     pub alert_threshold: u8,
 }
@@ -191,7 +207,10 @@ pub struct DetectionContext<'a> {
 pub fn evaluate(ctx: &DetectionContext) -> DetectionResult {
     let mut rules_triggered: Vec<RuleMatch> = Vec::new();
 
-    if let Some(m) = rule_a1_large_transfer(ctx.events, ctx.estimated_balance_e8s) {
+    // Use actual balance when available, fall back to tx-history estimate.
+    let effective_balance = ctx.balance_e8s.unwrap_or(ctx.estimated_balance_e8s);
+
+    if let Some(m) = rule_a1_large_transfer(ctx.events, effective_balance) {
         rules_triggered.push(m);
     }
     if let Some(m) = rule_a3_rapid_transactions(ctx.events) {
@@ -200,6 +219,9 @@ pub fn evaluate(ctx: &DetectionContext) -> DetectionResult {
     if let Some(m) = rule_a4_new_address(ctx.events, ctx.allowlisted_addresses) {
         rules_triggered.push(m);
     }
+
+    // A2 stub is intentionally not called here (Phase 3 placeholder).
+    let _ = rule_a2_known_scam_address(ctx.events);
 
     let score: u8 = rules_triggered
         .iter()
