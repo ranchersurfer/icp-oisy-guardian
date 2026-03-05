@@ -433,6 +433,51 @@ DFX_WARNING=-mainnet_plaintext_identity dfx canister update-settings guardian_co
 
 ---
 
+## Phase 3 — Admin Dashboard
+
+A SvelteKit-based admin dashboard for read-only visibility into Guardian canister state.
+
+### Pages
+- **Health Status** (`/`) — Engine running state, cycle balance, watermark count, alert queue length, last tick
+- **Configuration** (`/config`) — Active users, alert channels, detection rules (read-only view)
+- **Alert History** (`/alerts`) — Last 100 alerts, filterable by user/severity/status, sortable, paginated
+- **System Stats** (`/stats`) — Delivery success rates, breakdown by chain/severity, system uptime
+
+### Running Locally
+
+```bash
+cd frontend/
+npm install
+npm run dev   # → http://localhost:5173
+```
+
+### Building
+
+```bash
+cd frontend/
+npm run build
+# Output: frontend/build/ (~200KB, well under 2MB canister asset limit)
+```
+
+### Deploying to Asset Canister
+
+Add to `dfx.json`:
+```json
+"guardian_frontend": {
+  "type": "assets",
+  "source": ["frontend/build"]
+}
+```
+Then: `dfx deploy guardian_frontend --network ic`
+
+### Architecture Notes
+- Uses mock data by default (`src/lib/mock.ts`). Replace with `@dfinity/agent` calls for production.
+- `adapter-static` outputs a flat static site suitable for ICP asset canisters.
+- All pages are read-only; no mutations exposed via UI.
+- Tailwind CSS v4 (dark theme), Svelte 5, TypeScript.
+
+---
+
 ## Deployment to IC Mainnet
 
 > ⚠️ Phase 2+ — not yet configured for mainnet. Local/testnet only.

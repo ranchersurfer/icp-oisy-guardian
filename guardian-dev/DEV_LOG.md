@@ -1,5 +1,75 @@
 # Guardian-Dev Log
 
+## Phase 3: Admin Dashboard Frontend — 2026-03-04
+
+### Session: guardian-dev-phase3 (Subagent)
+**Time**: 2026-03-04 23:30 PST
+**Duration**: ~30 minutes
+**Status**: ✅ COMPLETE
+
+---
+
+### What Was Built
+
+#### SvelteKit Admin Dashboard (`frontend/`)
+
+**Framework**: SvelteKit + Tailwind CSS v4 + TypeScript + adapter-static
+
+**Pages**:
+1. **Health Status** (`/`) — Real-time engine health: cycle balance (T cycles), running state, watermark count, alert queue length, last tick timestamp, canister IDs
+2. **Configuration** (`/config`) — User list panel + detail view (alert channels, detection rules per user); clickable user selector
+3. **Alert History** (`/alerts`) — Full table with filters (user, severity, status, search), sortable columns (timestamp, score), paginated (10/page), 25 mock alerts
+4. **System Stats** (`/stats`) — Stat cards (users, total alerts, success rate, ticks), progress bar breakdowns by delivery status / chain / severity
+
+**Files Created**:
+| File | Description |
+|------|-------------|
+| `frontend/src/lib/types.ts` | TypeScript types mirroring guardian_engine Candid types |
+| `frontend/src/lib/mock.ts` | Mock data layer with 3 users, 25 alerts, simulated async fetch |
+| `frontend/src/lib/utils.ts` | Formatters: cycles, timestamps, truncation, color helpers |
+| `frontend/src/routes/+layout.svelte` | Dark nav shell with route highlighting, mock-mode indicator |
+| `frontend/src/routes/+layout.ts` | `prerender=true, ssr=false` for static export |
+| `frontend/src/routes/+page.svelte` | Health page with auto-refresh every 30s |
+| `frontend/src/routes/config/+page.svelte` | Config page with split-panel user explorer |
+| `frontend/src/routes/alerts/+page.svelte` | Alert history with full filter/sort/paginate |
+| `frontend/src/routes/stats/+page.svelte` | Stats page with progress-bar breakdowns |
+| `frontend/README.md` | Setup, build, deploy, architecture docs |
+
+**Build**: ✅ `npm run build` — zero errors  
+**Bundle size**: **200KB** (well under 2MB asset canister limit)  
+**Tailwind**: v4 via `@tailwindcss/vite` (no config file needed)  
+**Adapter**: `@sveltejs/adapter-static` — outputs static files for ICP asset canister
+
+---
+
+### Acceptance Criteria Status
+
+| Criterion | Status |
+|-----------|--------|
+| `npm run build` succeeds | ✅ |
+| Health page with real-time stats (mock) | ✅ |
+| Config page lists users + channels | ✅ |
+| Alert history: searchable, sortable, paginated | ✅ |
+| Assets < 2MB | ✅ (200KB) |
+| No hardcoded secrets | ✅ |
+| README with local dev + build + deploy + architecture | ✅ |
+
+---
+
+### Next Steps (Phase 4+)
+
+- [ ] Replace mock.ts with real `@dfinity/agent` calls
+- [ ] Fund identity for testnet deployment (ops)
+- [ ] Deploy `guardian_frontend` asset canister to IC
+- [ ] Add Candid UI generation from `.did` files
+- [ ] Alert delivery webhook smoke test on testnet
+
+---
+
+**Guardian-Dev Status**: 🟢 Phase 3 complete — dashboard ready for canister deployment
+
+---
+
 ## Phase 2d: Testnet Deployment with Live Config Sync — 2026-03-04
 
 ### Session: guardian-dev-phase2d (Subagent)
