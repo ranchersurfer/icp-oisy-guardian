@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchHealth } from '$lib/mock';
+	import { fetchHealth } from '$lib/canister';
 	import { formatCycles, formatTimestamp, timeAgo } from '$lib/utils';
 	import type { CanisterHealth } from '$lib/types';
 

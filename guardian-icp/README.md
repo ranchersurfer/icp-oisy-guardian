@@ -478,9 +478,41 @@ Then: `dfx deploy guardian_frontend --network ic`
 
 ---
 
+## Phase 4: Real Agent Integration & Testnet Frontend Deploy (2026-03-04)
+
+### What Changed
+- **`frontend/src/lib/canister.ts`** — Real `@dfinity/agent` integration replacing mock imports:
+  - `fetchHealth()` calls `guardian_engine.get_health()` live
+  - Graceful fallback to mock for methods not yet in engine DID
+  - Environment-aware: local (127.0.0.1:4943) vs IC (icp0.io)
+  - Live/mock indicator in dashboard nav bar
+- **IDL factory files** — `frontend/src/lib/idl/` matching `.did` files
+- **Environment config** — `.env.example` + `.env.local` for local dev
+- **Deploy script** — `scripts/deploy-frontend-testnet.sh` for IC asset canister deployment
+- **frontend/README.md** — Full env + testnet deployment docs
+
+### Canister Endpoints Available (Phase 4)
+| Endpoint | Canister | Status |
+|----------|----------|--------|
+| `get_health()` | guardian_engine | ✅ Live |
+| `get_config()` | guardian_config | ✅ Live (anonymous principal) |
+| `get_alerts()` | guardian_engine | ⏳ Not yet in DID — mock gracefully |
+| `list_users()` | guardian_config | ⏳ Not yet in public DID — mock gracefully |
+
+---
+
 ## Deployment to IC Mainnet
 
-> ⚠️ Phase 2+ — not yet configured for mainnet. Local/testnet only.
+> ⚠️ Testnet deployment blocked pending identity funding. Local/testnet only.
+
+```bash
+# Frontend deployment:
+./scripts/deploy-frontend-testnet.sh --network ic
+
+# Backend deployment (requires cycles):
+dfx cycles convert --amount 0.5 --network ic
+dfx deploy --network ic
+```
 
 ```bash
 # When ready:

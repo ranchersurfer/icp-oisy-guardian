@@ -1,6 +1,11 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/stores';
+	import { isLiveMode, getActiveHost, getActiveCanisterIds } from '$lib/canister';
+
+	const liveMode = isLiveMode();
+	const activeHost = getActiveHost();
+	const canisterIds = getActiveCanisterIds();
 
 	const nav = [
 		{ href: '/', label: '🏥 Health', id: 'health' },
@@ -32,8 +37,13 @@
 			{/each}
 		</nav>
 		<div class="ml-auto flex items-center gap-2 text-xs text-gray-500">
-			<span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-			<span>Mock Data Mode</span>
+			{#if liveMode}
+				<span class="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+				<span title="Engine: {canisterIds.engine} · {activeHost}">Live · {activeHost.replace('https://', '')}</span>
+			{:else}
+				<span class="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+				<span>Mock Data Mode</span>
+			{/if}
 		</div>
 	</header>
 

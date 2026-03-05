@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchAlerts } from '$lib/mock';
+	import { fetchAlerts } from '$lib/canister';
 	import { severityBadge, statusBadge, timeAgo, truncatePrincipal } from '$lib/utils';
 	import type { AlertRecord, AlertSeverity, AlertStatus } from '$lib/types';
 

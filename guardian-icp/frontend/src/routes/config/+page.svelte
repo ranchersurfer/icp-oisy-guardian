@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchUsers } from '$lib/mock';
+	import { fetchUsers } from '$lib/canister';
 	import { truncatePrincipal, formatTimestamp } from '$lib/utils';
 	import type { UserConfig } from '$lib/types';
 

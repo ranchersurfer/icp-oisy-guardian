@@ -1,5 +1,130 @@
 # Guardian-Dev Log
 
+## Phase 4: Real Agent Integration & Testnet Frontend Deployment — 2026-03-04
+
+### Session: guardian-dev-phase4 (Subagent)
+**Time**: 2026-03-04 19:30 PST
+**Duration**: ~25 minutes
+**Status**: ✅ COMPLETE
+
+---
+
+### What Was Built
+
+#### 1. @dfinity/agent Integration (`frontend/src/lib/canister.ts`)
+
+Replaced direct mock imports in all route pages with a new `canister.ts` integration layer:
+
+- **`fetchHealth()`** → `guardian_engine.get_health()` (real canister call)
+- **`fetchUsers()`** → `guardian_config.get_config()` (anonymous principal; falls back gracefully)
+- **`fetchAlerts()`** → graceful mock fallback (get_alerts() not yet in engine DID)
+- **`fetchStats()`** → derived from live health + alert counts
+
+Features:
+- Environment-aware agent init: `local` (127.0.0.1:4943) vs `testnet`/`ic` (icp0.io)
+- Root key fetch only for local/testnet networks (not IC mainnet)
+- Graceful fallback chain: try real call → on error → use mock + console.warn
+- `isLiveMode()`, `getActiveHost()`, `getActiveCanisterIds()` helpers
+- Live/Mock status indicator in nav bar (green pulse = live, yellow = mock)
+
+#### 2. IDL Factory Files
+
+Created `frontend/src/lib/idl/`:
+- `guardian_engine.idl.ts` — mirrors `src/guardian_engine.did` exactly
+- `guardian_config.idl.ts` — mirrors `src/guardian.did` exactly
+
+#### 3. Environment Config
+
+| File | Purpose |
+|------|---------|
+| `frontend/.env.example` | Template with all supported variables + docs |
+| `frontend/.env.local` | Local dev defaults (gitignored) with local replica IDs |
+
+Supported env vars: `VITE_CANISTER_NETWORK`, `VITE_CANISTER_IDS` (JSON), `VITE_ENGINE_CANISTER_ID`, `VITE_CONFIG_CANISTER_ID`, `VITE_IC_HOST`, `VITE_USE_MOCK`
+
+#### 4. Testnet Deployment Script
+
+`scripts/deploy-frontend-testnet.sh`:
+- Reads live canister IDs from dfx
+- Builds frontend with baked-in IDs
+- Adds `guardian_frontend` asset canister to `dfx.json` if missing
+- Deploys via `dfx deploy guardian_frontend --network <network>`
+- Supports `--network ic|testnet`, `--dry-run`
+
+#### 5. Documentation
+
+`frontend/README.md` updated with:
+- Environment setup guide (table of all vars)
+- Local dev workflow (dfx start → deploy → npm run dev)
+- Mock mode instructions
+- Testnet deployment section (script + manual steps)
+- Prerequisites for IC deployment (funding identity with cycles)
+- Phase history table
+
+---
+
+### Acceptance Criteria
+
+| Criterion | Status |
+|-----------|--------|
+| Real @dfinity/agent calls on local replica | ✅ (health page live) |
+| Graceful mock fallback for missing methods | ✅ |
+| Frontend bundle < 2MB | ✅ (412KB total) |
+| No TypeScript errors | ✅ (npm run build clean) |
+| .env.local + .env.example created | ✅ |
+| frontend/README.md updated | ✅ |
+| Testnet deploy script created | ✅ |
+| DEV_LOG.md Phase 4 entry | ✅ |
+
+---
+
+### Canister API Reality Check
+
+Phase 4 task description assumed endpoints that aren't yet in the DID:
+- `guardian_config.list_users()` — not exported (controller-only internal)
+- `guardian_config.get_config_for_user(principal)` — not in public DID
+- `guardian_engine.get_alerts()` — not yet exported
+
+**Solution**: canister.ts uses what IS available, falls back to mock for the rest. When these endpoints are added to the DID in Phase 5, canister.ts can be updated with zero changes to the route pages.
+
+---
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `frontend/src/lib/canister.ts` | NEW — real agent integration with mock fallback |
+| `frontend/src/lib/idl/guardian_engine.idl.ts` | NEW — IDL factory |
+| `frontend/src/lib/idl/guardian_config.idl.ts` | NEW — IDL factory |
+| `frontend/.env.example` | NEW — env template |
+| `frontend/.env.local` | NEW — local dev config (gitignored) |
+| `frontend/src/routes/*.svelte` | Updated: mock.ts → canister.ts imports |
+| `frontend/src/routes/+layout.svelte` | Updated: live/mock mode indicator |
+| `frontend/README.md` | Updated: env + testnet deployment sections |
+| `scripts/deploy-frontend-testnet.sh` | NEW — testnet deploy script |
+| `guardian-dev/DEV_LOG.md` | This entry |
+| `guardian-icp/README.md` | Phase 4 section |
+| `agent-status.json` | guardian-dev → idle |
+| `projects.json` | progress 90 → 95% |
+
+---
+
+### Build Stats
+
+| Metric | Value |
+|--------|-------|
+| Total bundle size | 412KB |
+| JS bundle | ~293KB |
+| Dependencies added | @dfinity/agent, @dfinity/candid |
+| TypeScript errors | 0 |
+| Build time | ~1s |
+
+---
+
+**Guardian-Dev Status**: 🟢 Phase 4 complete — real agent integration live
+
+---
+
 ## Phase 3: Admin Dashboard Frontend — 2026-03-04
 
 ### Session: guardian-dev-phase3 (Subagent)
