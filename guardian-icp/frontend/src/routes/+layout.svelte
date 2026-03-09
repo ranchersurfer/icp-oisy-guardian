@@ -1,58 +1,95 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { isLiveMode, getActiveHost, getActiveCanisterIds } from '$lib/canister';
+	import { authState, initAuth, login, logout } from '$lib/auth';
+	import { getActiveCanisterIds, getActiveHost, isLiveMode } from '$lib/canister';
+	import { shortenPrincipal } from '$lib/guardian';
 
 	const liveMode = isLiveMode();
 	const activeHost = getActiveHost();
 	const canisterIds = getActiveCanisterIds();
 
-	const nav = [
-		{ href: '/', label: '🏥 Health', id: 'health' },
-		{ href: '/config', label: '⚙️ Config', id: 'config' },
-		{ href: '/alerts', label: '🚨 Alerts', id: 'alerts' },
-		{ href: '/stats', label: '📊 Stats', id: 'stats' }
+	const consumerNav = [
+		{ href: '/', label: 'Home' },
+		{ href: '/onboarding', label: 'Onboarding' },
+		{ href: '/review', label: 'Review' },
+		{ href: '/dashboard', label: 'Dashboard' }
 	];
+
+	const adminNav = [
+		{ href: '/config', label: 'Config' },
+		{ href: '/alerts', label: 'Alerts' },
+		{ href: '/stats', label: 'Stats' }
+	];
+
+	onMount(() => {
+		initAuth();
+	});
 </script>
 
-<div class="min-h-screen bg-gray-950 text-gray-100 font-mono">
-	<!-- Top bar -->
-	<header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center gap-6">
-		<div class="flex items-center gap-2">
-			<span class="text-2xl">🛡️</span>
-			<span class="text-lg font-bold text-white">Guardian</span>
-			<span class="text-gray-500 text-sm">Admin Dashboard</span>
+<div class="min-h-screen bg-[#08111f] text-slate-100">
+	<header class="border-b border-white/10 bg-slate-950/90 backdrop-blur">
+		<div class="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
+			<a href="/" class="flex items-center gap-3">
+				<div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/20 text-xl">🛡️</div>
+				<div>
+					<div class="text-lg font-semibold text-white">Guardian</div>
+					<div class="text-xs text-slate-400">Consumer onboarding on live IC canisters</div>
+				</div>
+			</a>
+
+			<nav class="ml-6 hidden items-center gap-2 lg:flex">
+				{#each consumerNav as item}
+					<a
+						href={item.href}
+						class={`rounded-full px-3 py-2 text-sm transition ${$page.url.pathname === item.href ? 'bg-white text-slate-950' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}
+					>
+						{item.label}
+					</a>
+				{/each}
+			</nav>
+
+			<div class="ml-auto flex items-center gap-3">
+				<div class="hidden rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 md:block">
+					{#if liveMode}
+						Live · {canisterIds.config} · {activeHost.replace('https://', '').replace('http://', '')}
+					{:else}
+						Mock mode
+					{/if}
+				</div>
+
+				{#if $authState.isAuthenticated}
+					<div class="hidden rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-200 sm:block">
+						II · {shortenPrincipal($authState.principal ?? '')}
+					</div>
+					<button
+						on:click={logout}
+						class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+					>
+						Disconnect
+					</button>
+				{:else}
+					<button
+						disabled={$authState.connecting}
+						on:click={login}
+						class="rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
+					>
+						{$authState.connecting ? 'Connecting…' : 'Connect with Internet Identity'}
+					</button>
+				{/if}
+			</div>
 		</div>
-		<nav class="flex gap-2 ml-4">
-			{#each nav as { href, label }}
-				<a
-					{href}
-					class="px-3 py-1.5 rounded text-sm transition-colors
-						{$page.url.pathname === href
-							? 'bg-indigo-700 text-white'
-							: 'text-gray-400 hover:text-white hover:bg-gray-800'}"
-				>
-					{label}
-				</a>
+
+		<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-6 pb-4 text-xs text-slate-500">
+			<span class="uppercase tracking-[0.2em]">Admin</span>
+			{#each adminNav as item}
+				<a href={item.href} class="rounded-full border border-white/10 px-2.5 py-1 transition hover:border-white/20 hover:text-slate-300">{item.label}</a>
 			{/each}
-		</nav>
-		<div class="ml-auto flex items-center gap-2 text-xs text-gray-500">
-			{#if liveMode}
-				<span class="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-				<span title="Engine: {canisterIds.engine} · {activeHost}">Live · {activeHost.replace('https://', '')}</span>
-			{:else}
-				<span class="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
-				<span>Mock Data Mode</span>
-			{/if}
 		</div>
 	</header>
 
-	<!-- Main content -->
-	<main class="max-w-7xl mx-auto px-6 py-8">
+	<main class="mx-auto max-w-7xl px-6 py-8">
 		<slot />
 	</main>
-
-	<footer class="text-center text-gray-700 text-xs py-4 border-t border-gray-900">
-		Guardian ICP Admin Dashboard · Read-only · All mutations require backend auth
-	</footer>
 </div>

@@ -1,118 +1,108 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { fetchHealth } from '$lib/canister';
-	import { formatCycles, formatTimestamp, timeAgo } from '$lib/utils';
-	import type { CanisterHealth } from '$lib/types';
+	import { goto } from '$app/navigation';
+	import { authState, login } from '$lib/auth';
+	import { getMyConfig } from '$lib/canister';
 
-	let health: CanisterHealth | null = null;
-	let loading = true;
-	let error = '';
-	let refreshInterval: ReturnType<typeof setInterval>;
+	let checking = false;
+	let routeError = '';
 
-	async function load() {
+	$: if ($authState.isAuthenticated && !checking) {
+		checkExistingConfig();
+	}
+
+	async function connectAndContinue() {
+		routeError = '';
 		try {
-			health = await fetchHealth();
-		} catch (e) {
-			error = String(e);
-		} finally {
-			loading = false;
+			await login();
+		} catch (error) {
+			routeError = error instanceof Error ? error.message : 'Internet Identity connection failed.';
 		}
 	}
 
-	onMount(() => {
-		load();
-		refreshInterval = setInterval(load, 30_000);
-		return () => clearInterval(refreshInterval);
-	});
+	async function checkExistingConfig() {
+		checking = true;
+		routeError = '';
+		try {
+			const result = await getMyConfig();
+			if ('Ok' in result) {
+				await goto('/dashboard');
+			} else {
+				await goto('/onboarding');
+			}
+		} catch (error) {
+			routeError = error instanceof Error ? error.message : 'Failed to load your Guardian state.';
+		} finally {
+			checking = false;
+		}
+	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-white">🏥 Health Status</h1>
-		<button
-			on:click={load}
-			class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-sm rounded border border-gray-700"
-		>
-			↻ Refresh
-		</button>
-	</div>
+<div class="space-y-8">
+	<section class="grid gap-8 rounded-[2rem] border border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.14),_transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.98))] p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-12">
+		<div class="space-y-6">
+			<div class="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-xs uppercase tracking-[0.25em] text-cyan-200">
+				Phase 5 · Sprint 1
+			</div>
+			<div class="space-y-4">
+				<h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-white lg:text-6xl">
+					Protect your ICP wallet from suspicious activity
+				</h1>
+				<p class="max-w-2xl text-lg text-slate-300">
+					A safety layer that watches your wallet activity and alerts you when something looks off.
+				</p>
+			</div>
 
-	{#if loading}
-		<div class="text-gray-500 animate-pulse">Loading canister health…</div>
-	{:else if error}
-		<div class="bg-red-950 border border-red-800 text-red-300 p-4 rounded">{error}</div>
-	{:else if health}
-		<!-- Engine Status -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-			<div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-				<div class="text-gray-500 text-xs mb-1">Status</div>
-				<div class="flex items-center gap-2 text-lg font-bold">
-					{#if health.engine.is_running}
-						<span class="w-3 h-3 bg-green-500 rounded-full inline-block"></span>
-						<span class="text-green-400">Running</span>
-					{:else}
-						<span class="w-3 h-3 bg-red-500 rounded-full inline-block"></span>
-						<span class="text-red-400">Stopped</span>
-					{/if}
+			<div class="flex flex-wrap gap-3">
+				<button
+					on:click={connectAndContinue}
+					disabled={$authState.connecting || checking}
+					class="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
+				>
+					{$authState.connecting || checking ? 'Checking account…' : 'Connect with Internet Identity'}
+				</button>
+				<a href="#how-it-works" class="rounded-full border border-white/15 px-6 py-3 text-sm text-slate-200 transition hover:bg-white/10">
+					How it works
+				</a>
+			</div>
+
+			{#if routeError}
+				<div class="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+					{routeError}
 				</div>
-			</div>
-
-			<div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-				<div class="text-gray-500 text-xs mb-1">Cycle Balance</div>
-				<div class="text-lg font-bold text-white">{formatCycles(health.engine.cycle_balance)}</div>
-				<div class="text-xs text-gray-500 mt-1">
-					{#if health.engine.cycle_balance > BigInt('500000000000')}
-						<span class="text-green-400">✓ Above safety threshold</span>
-					{:else}
-						<span class="text-red-400">⚠ Below 500B threshold</span>
-					{/if}
-				</div>
-			</div>
-
-			<div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-				<div class="text-gray-500 text-xs mb-1">Watermarks Tracked</div>
-				<div class="text-lg font-bold text-white">{health.engine.watermark_count.toString()}</div>
-				<div class="text-xs text-gray-500 mt-1">Active user×chain monitors</div>
-			</div>
-
-			<div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-				<div class="text-gray-500 text-xs mb-1">Alert Queue</div>
-				<div class="text-lg font-bold {health.alert_queue_len > BigInt(10) ? 'text-yellow-400' : 'text-white'}">
-					{health.alert_queue_len.toString()}
-				</div>
-				<div class="text-xs text-gray-500 mt-1">Pending delivery</div>
-			</div>
+			{/if}
 		</div>
 
-		<!-- Timer info -->
-		<div class="bg-gray-900 border border-gray-800 rounded-lg p-5">
-			<h2 class="text-gray-400 text-sm font-semibold mb-4 uppercase tracking-wider">Timer Details</h2>
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-				<div>
-					<span class="text-gray-500">Last tick:</span>
-					<span class="text-white ml-2">{timeAgo(health.engine.last_tick)}</span>
-					<span class="text-gray-600 ml-2 text-xs">({formatTimestamp(health.engine.last_tick)})</span>
-				</div>
-				<div>
-					<span class="text-gray-500">Config canister:</span>
-					<span class="text-white ml-2 font-mono text-xs">{health.config_canister_id ?? '—'}</span>
+		<div class="rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
+			<div class="space-y-4">
+				<div class="text-sm font-semibold uppercase tracking-[0.25em] text-slate-400">Trust</div>
+				<ul class="space-y-3 text-sm text-slate-200">
+					<li>• Non-custodial — Guardian never holds your funds</li>
+					<li>• No seed phrase required</li>
+					<li>• Settings stored on live Internet Computer canisters</li>
+					<li>• Advisory alerts, not automatic fund movement</li>
+				</ul>
+				<div class="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+					If a large transfer suddenly moves 60% of your balance to a new address, Guardian can flag it and alert you.
 				</div>
 			</div>
 		</div>
+	</section>
 
-		<!-- Canister IDs -->
-		<div class="bg-gray-900 border border-gray-800 rounded-lg p-5">
-			<h2 class="text-gray-400 text-sm font-semibold mb-4 uppercase tracking-wider">Local Canister IDs (devnet)</h2>
-			<div class="space-y-2 text-sm">
-				<div class="flex items-center gap-3">
-					<span class="text-gray-500 w-36">guardian_config:</span>
-					<code class="text-indigo-300">uxrrr-q7777-77774-qaaaq-cai</code>
-				</div>
-				<div class="flex items-center gap-3">
-					<span class="text-gray-500 w-36">guardian_engine:</span>
-					<code class="text-indigo-300">u6s2n-gx777-77774-qaaba-cai</code>
-				</div>
-			</div>
+	<section id="how-it-works" class="grid gap-4 md:grid-cols-3">
+		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">1 · Connect</div>
+			<h2 class="mb-2 text-xl font-semibold text-white">Internet Identity first</h2>
+			<p class="text-sm text-slate-300">Connect with Internet Identity so Guardian can save protection settings under your principal.</p>
 		</div>
-	{/if}
+		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">2 · Choose</div>
+			<h2 class="mb-2 text-xl font-semibold text-white">Safe, Balanced, or Aggressive</h2>
+			<p class="text-sm text-slate-300">Start with a preset now, then fine-tune later once the broader settings UI lands.</p>
+		</div>
+		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">3 · Save live</div>
+			<h2 class="mb-2 text-xl font-semibold text-white">Stored on-chain</h2>
+			<p class="text-sm text-slate-300">Guardian writes your configuration to the live <code class="text-cyan-200">guardian_config</code> canister, then reads it back before showing your dashboard.</p>
+		</div>
+	</section>
 </div>

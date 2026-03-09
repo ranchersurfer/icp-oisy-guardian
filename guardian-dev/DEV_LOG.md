@@ -1,5 +1,88 @@
 # Guardian-Dev Log
 
+## Phase 5: Consumer Productization Spec + Implementation Plan — 2026-03-08
+
+### Session: guardian-dev-phase5-plan (Subagent)
+**Time**: 2026-03-08 17:23 PDT  
+**Status**: ✅ PLANNED / SPECIFIED  
+**Guardian-Dev Status**: working
+
+---
+
+### What Was Produced
+
+#### 1. Product Spec
+Created `guardian-dev/PHASE_5_PRODUCT_SPEC.md` covering:
+- first-time user flow from landing page to on-chain config save
+- 5 core consumer screens
+- trust messaging for a non-custodial wallet safety product
+- Safe / Balanced / Aggressive presets
+- mapping from consumer UI controls to live canister config fields
+- separation of admin-only vs end-user-visible capabilities
+- recommended implementation order
+
+#### 2. Build Plan
+Created `guardian-dev/PHASE_5_BUILD_PLAN.md` covering:
+- consumer UI milestones
+- live frontend integration with deployed IC canisters
+- alert history UX expectations
+- wallet connect/auth assumptions
+- testing plan
+- practical risks and dependencies
+
+#### 3. Tracker Updates
+Updated workspace planning/state files:
+- `tasks.json`
+  - added Phase 5 execution tasks for onboarding UI, presets/settings, alerts/status, wallet connect/auth, and live canister wiring
+- `projects.json`
+  - kept `proj-guardian` active
+  - noted live IC deployment and Phase 5 as the next milestone
+- `agent-status.json`
+  - set `guardian-dev.status = "working"`
+  - set current task to `Phase 5: consumer productization spec + implementation plan`
+
+---
+
+### Live Deployment Baseline Used for Planning
+- `guardian_config`: `higkb-faaaa-aaaau-ae5cq-cai`
+- `guardian_engine`: `dyqi7-riaaa-aaaau-afmla-cai`
+- Backend/admin/dev tooling exists
+- Product gap is the consumer-first onboarding + settings + alerts experience
+
+---
+
+### Phase 5 Scope (Planned)
+Phase 5 is **not** a new backend phase. It is the first consumer-ready product layer on top of the live deployment:
+- landing/trust/connect flow
+- wallet-authenticated onboarding
+- preset-driven protection setup
+- personal dashboard/status view
+- personal settings editor
+- personal alert history UX
+- live frontend wiring to the IC canisters with minimal/no ambiguous mock behavior
+
+Clear separation maintained between **already shipped** backend/canister functionality and **planned** consumer UI/productization work.
+
+---
+
+### Top Execution Priorities
+1. **Wallet connect + authenticated actor flow**
+   - required to make the consumer UI principal-aware and real
+2. **Preset-based onboarding + live config save/load**
+   - fastest path to a usable first-time product experience
+3. **Personal dashboard + alerts/status UX**
+   - turns Guardian from admin tooling into a user-facing product
+
+---
+
+### Regular Check-in Rule
+- Every major Guardian-Dev run must leave a timestamped progress note in DEV_LOG.md
+- Must update agent-status.json at start and finish
+- Must update tasks.json when a milestone meaningfully changes
+- Must update projects.json when the active milestone changes
+
+---
+
 ## Phase 4: Real Agent Integration & Testnet Frontend Deployment — 2026-03-04
 
 ### Session: guardian-dev-phase4 (Subagent)
@@ -739,3 +822,110 @@ Advice: dfx cycles convert --amount=0.123 --network testnet
 ---
 
 **Guardian-Dev Status**: 🟢 Ready for Phase 2b
+
+---
+
+## IC Deployment Update — 2026-03-08
+
+### Manual Ops + Assistant Deployment Recovery
+**Time**: 2026-03-08 14:20 PST  
+**Status**: ✅ IC canisters created/installed
+
+### What happened
+- Recovered the original funded deployer identity from seed phrase:
+  - `guardian_deployer_old`
+  - principal `uxtpi-3vejp-3tb3k-cgxqz-avhh4-hrwcw-ivjd3-ts5ir-gwg3f-ydgrt-vae`
+- Converted **2 ICP** to cycles successfully
+  - transfer block height: `34599415`
+  - cycles added: `3_571_000_000_000`
+- Initial deployment attempt failed because a stale repo copy was used:
+  - wrong path: `/home/ranch/openclaw/icp-oisy-guardian`
+  - correct path: `/home/ranch/.openclaw/workspace/guardian-icp`
+- Using the current workspace repo, local build succeeded
+- `guardian_engine` created on IC successfully
+- `guardian_config` required additional top-up because it was underfunded for install
+- Deposited **2_000_000_000 cycles** into `guardian_config`
+- Reinstall/install then completed successfully
+
+### Live IC Canister IDs
+- `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
+- `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`
+
+### Notes
+- The interactive `dfx wallet balance` check failed earlier because no wallet was configured for that identity/network combo; this did not block cycles conversion.
+- Deployment used `guardian_deployer_old` in plaintext mode with `DFX_WARNING=-mainnet_plaintext_identity`.
+- Final verification succeeded:
+  - `guardian_config.health()` returned WARNING low-cycle status with ~397B cycles remaining (~7 days runway)
+  - `guardian_engine.get_health()` returned healthy running state with ~2.99T cycles remaining
+
+## Phase 5 Sprint 1: Consumer onboarding + live config flow — 2026-03-09
+
+### Session: guardian-dev-sprint1 (Subagent)
+**Time**: 2026-03-09 03:58 PDT  
+**Status**: ✅ SPRINT 1 IMPLEMENTED / BUILD-VERIFIED  
+**Guardian-Dev Status**: working
+
+### What Was Built
+- Reworked the frontend into a real consumer flow while keeping the existing admin routes intact.
+- Added new consumer routes:
+  - `/` → landing / trust / connect
+  - `/onboarding` → Safe / Balanced / Aggressive preset selection
+  - `/review` → review + confirm before save
+  - `/dashboard` → personal dashboard backed by live saved config
+- Added an Internet Identity auth layer using `@dfinity/auth-client` with session restore on refresh, connect/disconnect state, and principal-aware actor creation.
+- Added preset mapping + config view adapters in frontend helpers.
+- Wired consumer flow to live `guardian_config` canister methods:
+  - `get_config()` for first-time-user detection and dashboard hydration
+  - `set_config()` for live config save
+  - read-back `get_config()` after save before redirecting to dashboard
+- Updated the root layout/nav so consumer pages are primary while admin pages remain available under `/config`, `/alerts`, and `/stats`.
+
+### Live vs blocked
+#### Live now
+- Internet Identity auth flow is implemented in the frontend.
+- Consumer landing/onboarding/review/dashboard routes compile and serve.
+- Live `guardian_config.get_config()` and `guardian_config.set_config()` were smoke-tested directly against IC mainnet canister `higkb-faaaa-aaaau-ae5cq-cai` with a throwaway principal:
+  - before save: `Err("No config found for this principal")`
+  - save: `Ok`
+  - after save: `Ok(record { ... })`
+- Production build passes:
+  - `npm run check` ✅
+  - `npm run build` ✅
+- Preview server route checks passed for:
+  - `/`
+  - `/onboarding`
+  - `/review`
+  - `/dashboard`
+  - `/config`
+  - `/alerts`
+  - `/stats`
+
+#### Still blocked / not in Sprint 1
+- No full consumer alert history UX yet (intentionally out of Sprint 1 scope).
+- Dashboard settings editing is still a forward path / stub CTA, not a full editor.
+- I did not perform an end-to-end browser-click II login against a real browser session inside this subagent context; instead I verified the auth implementation builds and the live canister contract itself works with a real principal via `dfx` smoke test.
+
+### Files Changed
+- `guardian-icp/frontend/package.json`
+- `guardian-icp/frontend/src/lib/auth.ts`
+- `guardian-icp/frontend/src/lib/canister.ts`
+- `guardian-icp/frontend/src/lib/guardian.ts`
+- `guardian-icp/frontend/src/lib/types.ts`
+- `guardian-icp/frontend/src/routes/+layout.svelte`
+- `guardian-icp/frontend/src/routes/+page.svelte`
+- `guardian-icp/frontend/src/routes/onboarding/+page.svelte`
+- `guardian-icp/frontend/src/routes/review/+page.svelte`
+- `guardian-icp/frontend/src/routes/dashboard/+page.svelte`
+- `/home/ranch/.openclaw/workspace/agent-status.json`
+- `/home/ranch/.openclaw/workspace/tasks.json`
+- `/home/ranch/.openclaw/workspace/projects.json`
+- `/home/ranch/.openclaw/workspace/guardian-dev/DEV_LOG.md`
+
+### Verification Notes
+- Added frontend deps for II/auth and principal handling.
+- Build output completed successfully with adapter-static.
+- Live canister smoke test used throwaway principal:
+  - `rgngw-og3kg-lng3f-3olyo-giuv3-sc2ou-t7um4-gvabw-23dus-fbk5h-aae`
+- Live canister IDs used:
+  - `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
+  - `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`

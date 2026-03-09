@@ -1,6 +1,3 @@
-// Guardian ICP Admin Dashboard — Type Definitions
-// Mirrors guardian_engine canister response types
-
 export interface EngineHealthStatus {
 	cycle_balance: bigint;
 	last_tick: bigint;
@@ -60,4 +57,60 @@ export interface CanisterHealth {
 	engine: EngineHealthStatus;
 	config_canister_id: string | null;
 	alert_queue_len: bigint;
+}
+
+export interface GuardianConfigRecord {
+	owner: { toString(): string };
+	created_at: bigint;
+	updated_at: bigint;
+	monitored_chains: string[];
+	large_transfer_pct: number;
+	daily_outflow_pct: number;
+	rapid_tx_count: number;
+	rapid_tx_window_secs: bigint;
+	new_address_alert: boolean;
+	alert_threshold: number;
+	emergency_threshold: number;
+	alert_channels: string[];
+	allowlisted_addresses: string[];
+}
+
+export type GuardianConfigResult = { Ok: GuardianConfigRecord } | { Err: string };
+export type GuardianWriteResult = { Ok: null } | { Err: string };
+
+export type GuardianPresetId = 'safe' | 'balanced' | 'aggressive';
+
+export interface GuardianPreset {
+	id: GuardianPresetId;
+	name: string;
+	tagline: string;
+	description: string;
+	recommended?: boolean;
+	config: {
+		large_transfer_pct: number;
+		daily_outflow_pct: number;
+		rapid_tx_count: number;
+		rapid_tx_window_secs: number;
+		new_address_alert: boolean;
+		alert_threshold: number;
+		emergency_threshold: number;
+		monitored_chains: string[];
+	};
+}
+
+export interface GuardianConfigView {
+	preset: GuardianPresetId | null;
+	status: 'active' | 'not_configured';
+	owner: string;
+	lastUpdated: bigint;
+	createdAt: bigint;
+	monitoredChains: string[];
+	largeTransferPct: number;
+	rapidTxCount: number;
+	rapidTxWindowSecs: number;
+	newAddressAlert: boolean;
+	alertThreshold: number;
+	emergencyThreshold: number;
+	alertChannels: string[];
+	allowlistedAddresses: string[];
 }
