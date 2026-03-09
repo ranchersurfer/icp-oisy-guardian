@@ -929,3 +929,23 @@ Advice: dfx cycles convert --amount=0.123 --network testnet
 - Live canister IDs used:
   - `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
   - `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`
+
+## Privacy Hardening Sprint — 2026-03-09
+
+### Session: guardian-privacy-hardening (Subagent)
+**Time**: 2026-03-09 09:51 PDT  
+**Status**: 🚧 IN PROGRESS  
+**Guardian-Dev Status**: working
+
+### Progress note
+- Started privacy-hardening implementation in frontend.
+- Replaced private/admin route mock fallback with fail-closed behavior on `/config`, `/alerts`, and `/stats`.
+- Added UI masking helpers for email/webhook/Discord/Slack destinations.
+- Gated operator/admin nav behind explicit `VITE_ENABLE_OPERATOR_ROUTES=true` instead of exposing it in normal consumer mode.
+- Tightened dashboard display so saved destination values are masked in normal user view.
+
+### Completion note
+- Build verification passed: `npm run check` ✅ and `npm run build` ✅ in `guardian-icp/frontend`.
+- Route outputs verified in static build: `/`, `/onboarding`, `/review`, `/dashboard`, `/config`, `/alerts`, `/stats`.
+- Disabled/gated: broad alert-history UI remains intentionally disabled until a reviewed caller-scoped `get_my_alerts()` or controller-only method exists.
+- Remaining later-sprint recommendation: move raw alert destination storage away from plaintext-like on-chain strings and toward encrypted/vetKeys-aware handling before making stronger privacy claims.

@@ -155,13 +155,13 @@
   {
     "id": "task-14",
     "title": "Guardian Phase 5 \u2014 Alerts and status experience",
-    "description": "Create consumer dashboard/status screen plus personal alerts/history UX with clear empty states, severity presentation, and live/missing-data handling.",
-    "status": "in_progress",
+    "description": "Consumer dashboard/status screen shipped. Broad alert-history frontend path is now privacy-gated pending a caller-scoped or controller-scoped backend method.",
+    "status": "done",
     "assignee": "guardian-dev",
     "priority": "high",
     "project_id": "proj-guardian",
     "created_at": "2026-03-09T00:23:06Z",
-    "updated_at": "2026-03-09T03:58:00Z"
+    "updated_at": "2026-03-09T16:51:12Z"
   },
   {
     "id": "task-15",
@@ -186,5 +186,17 @@
     "created_at": "2026-03-09T00:23:06Z",
     "updated_at": "2026-03-09T03:58:00Z",
     "completed_at": "2026-03-09T03:58:00Z"
+  },
+  {
+    "id": "task-17",
+    "title": "Guardian Phase 5 \u2014 Privacy hardening sprint",
+    "description": "Mask private destinations in UI, fail closed on private/operator routes, gate operator nav, disable broad alert history exposure until scoped APIs exist, reduce privacy-leaky frontend logging, and add vetKeys/privacy follow-up notes.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-09T16:51:12Z",
+    "updated_at": "2026-03-09T16:51:12Z",
+    "completed_at": "2026-03-09T16:51:12Z"
   }
 ]

@@ -3,10 +3,11 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { authState, initAuth, login, logout } from '$lib/auth';
-	import { getActiveCanisterIds, getActiveHost, isLiveMode } from '$lib/canister';
+	import { getActiveCanisterIds, getActiveHost, isLiveMode, isOperatorModeEnabled } from '$lib/canister';
 	import { shortenPrincipal } from '$lib/guardian';
 
 	const liveMode = isLiveMode();
+	const operatorMode = isOperatorModeEnabled();
 	const activeHost = getActiveHost();
 	const canisterIds = getActiveCanisterIds();
 
@@ -17,7 +18,7 @@
 		{ href: '/dashboard', label: 'Dashboard' }
 	];
 
-	const adminNav = [
+	const operatorNav = [
 		{ href: '/config', label: 'Config' },
 		{ href: '/alerts', label: 'Alerts' },
 		{ href: '/stats', label: 'Stats' }
@@ -81,11 +82,19 @@
 			</div>
 		</div>
 
-		<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-6 pb-4 text-xs text-slate-500">
-			<span class="uppercase tracking-[0.2em]">Admin</span>
-			{#each adminNav as item}
-				<a href={item.href} class="rounded-full border border-white/10 px-2.5 py-1 transition hover:border-white/20 hover:text-slate-300">{item.label}</a>
-			{/each}
+		<div class="mx-auto max-w-7xl px-6 pb-4">
+			{#if operatorMode}
+				<div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+					<span class="uppercase tracking-[0.2em] text-amber-300">Operator routes enabled</span>
+					{#each operatorNav as item}
+						<a href={item.href} class="rounded-full border border-amber-400/20 px-2.5 py-1 text-amber-100 transition hover:border-amber-300/40 hover:text-white">{item.label}</a>
+					{/each}
+				</div>
+			{:else}
+				<div class="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs text-amber-100">
+					Operator-only routes are hidden in normal consumer mode. Enable <code>VITE_ENABLE_OPERATOR_ROUTES=true</code> only for reviewed operator sessions.
+				</div>
+			{/if}
 		</div>
 	</header>
 

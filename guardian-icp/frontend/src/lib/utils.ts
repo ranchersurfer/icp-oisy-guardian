@@ -1,4 +1,4 @@
-import type { AlertSeverity, AlertStatus } from './types';
+import type { AlertSeverity, AlertStatus, AlertChannel } from './types';
 
 export function formatCycles(cycles: bigint): string {
 	const t = Number(cycles) / 1e12;
@@ -22,6 +22,42 @@ export function timeAgo(ns: bigint): string {
 export function truncatePrincipal(p: string): string {
 	if (p.length <= 16) return p;
 	return `${p.slice(0, 8)}…${p.slice(-6)}`;
+}
+
+export function maskValue(value: string, visibleStart = 2, visibleEnd = 2): string {
+	if (!value) return 'Hidden';
+	if (value.length <= visibleStart + visibleEnd) return '••••';
+	return `${value.slice(0, visibleStart)}${'•'.repeat(Math.max(4, value.length - visibleStart - visibleEnd))}${value.slice(-visibleEnd)}`;
+}
+
+export function maskEmail(email: string): string {
+	const [local, domain] = email.split('@');
+	if (!local || !domain) return maskValue(email);
+	const parts = domain.split('.');
+	const root = parts[0] ?? domain;
+	const suffix = parts.length > 1 ? `.${parts.slice(1).join('.')}` : '';
+	return `${maskValue(local, 1, 0)}@${maskValue(root, 1, 0)}${suffix}`;
+}
+
+export function maskUrl(raw: string): string {
+	try {
+		const url = new URL(raw);
+		const pathTail = url.pathname.split('/').filter(Boolean).slice(-1)[0] ?? '';
+		return `${url.protocol}//${url.host}/${pathTail ? maskValue(pathTail, 0, 4) : '••••'}`;
+	} catch {
+		return maskValue(raw, 0, 4);
+	}
+}
+
+export function maskAlertChannel(channel: AlertChannel): string {
+	switch (channel.type) {
+		case 'Email':
+			return maskEmail(channel.target);
+		case 'Discord':
+		case 'Slack':
+		case 'Webhook':
+			return maskUrl(channel.target);
+	}
 }
 
 export function severityColor(s: AlertSeverity): string {

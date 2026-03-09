@@ -9,6 +9,7 @@
 		mapConfigResultToView,
 		shortenPrincipal
 	} from '$lib/guardian';
+	import { maskEmail, maskUrl } from '$lib/utils';
 	import type { GuardianConfigView } from '$lib/types';
 
 	let loading = true;
@@ -18,6 +19,14 @@
 	function formatDate(value: bigint): string {
 		const millis = Number(value / BigInt(1_000_000));
 		return new Date(millis).toLocaleString();
+	}
+
+	function maskSavedChannel(raw: string): string {
+		if (raw.startsWith('email;address=')) return maskEmail(raw.replace('email;address=', '').split(';')[0] ?? '');
+		if (raw.startsWith('discord;url=')) return maskUrl(raw.replace('discord;url=', '').split(';')[0] ?? '');
+		if (raw.startsWith('slack;url=')) return maskUrl(raw.replace('slack;url=', '').split(';')[0] ?? '');
+		if (raw.startsWith('webhook;url=')) return maskUrl(raw.replace('webhook;url=', '').split(';')[0] ?? '');
+		return 'Hidden destination';
 	}
 
 	async function loadDashboard() {
@@ -74,7 +83,7 @@
 			<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
 				<div class="text-sm text-slate-400">Owner principal</div>
 				<div class="mt-2 text-2xl font-semibold text-white">{shortenPrincipal(view.owner)}</div>
-				<div class="mt-2 break-all font-mono text-xs text-slate-500">{view.owner}</div>
+				<div class="mt-2 break-all font-mono text-xs text-slate-500">{shortenPrincipal(view.owner, 12, 8)}</div>
 			</div>
 			<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
 				<div class="text-sm text-slate-400">Last updated</div>
@@ -102,6 +111,20 @@
 						<div class="text-sm text-slate-400">Monitored chains</div>
 						<div class="mt-2 text-xl font-semibold text-white">{view.monitoredChains.join(', ')}</div>
 					</div>
+				</div>
+
+				<div class="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+					<div class="text-sm text-slate-400">Configured alert destinations</div>
+					{#if view.alertChannels.length > 0}
+						<div class="mt-3 space-y-2 text-sm text-slate-200">
+							{#each view.alertChannels as channel}
+								<div class="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 font-mono">{maskSavedChannel(channel)}</div>
+							{/each}
+						</div>
+						<p class="mt-3 text-xs text-amber-200">Destinations are masked in the UI. Future privacy work: store destination secrets encrypted before any vetKeys-backed rollout.</p>
+					{:else}
+						<p class="mt-3 text-sm text-slate-400">No alert destination configured yet.</p>
+					{/if}
 				</div>
 			</div>
 

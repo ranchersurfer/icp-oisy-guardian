@@ -1,7 +1,6 @@
 import {
 	fetchHealth as mockFetchHealth,
 	fetchAlerts as mockFetchAlerts,
-	fetchUsers as mockFetchUsers,
 	fetchStats as mockFetchStats
 } from './mock.js';
 import { createConfigActor, createEngineActor, CANISTER_IDS } from './auth.js';
@@ -106,50 +105,35 @@ export async function fetchHealth(): Promise<CanisterHealth> {
 			config_canister_id: CANISTER_IDS.config,
 			alert_queue_len: queueLen
 		};
-	} catch (err) {
-		console.warn('[guardian] fetchHealth fallback to mock', err);
+	} catch {
 		return mockFetchHealth();
 	}
 }
 
 export async function fetchUsers(): Promise<UserConfig[]> {
-	if (USE_MOCK) return mockFetchUsers();
+	if (USE_MOCK) return [];
 
-	try {
-		const result = await getMyConfig();
-		if ('Ok' in result) {
-			return [rawConfigToUserConfig(result.Ok)];
-		}
-		return [];
-	} catch (err) {
-		console.warn('[guardian] fetchUsers fallback to mock', err);
-		return mockFetchUsers();
+	const result = await getMyConfig();
+	if ('Ok' in result) {
+		return [rawConfigToUserConfig(result.Ok)];
 	}
+	return [];
 }
 
 export async function fetchAlerts(): Promise<AlertRecord[]> {
-	if (USE_MOCK) return mockFetchAlerts();
-	try {
-		const engine = await createEngineActor();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const raw = await (engine as any).get_alerts();
-		if (Array.isArray(raw)) return raw as AlertRecord[];
-		return [];
-	} catch {
-		return [];
-	}
+	if (USE_MOCK) return [];
+	return [];
 }
 
 export async function fetchStats(): Promise<SystemStats> {
 	if (USE_MOCK) return mockFetchStats();
 	const health = await fetchHealth();
-	const alerts = await fetchAlerts();
 	return {
 		total_users: 1,
 		total_alerts_queued: Number(health.alert_queue_len),
-		alerts_sent: alerts.filter((a) => a.status === 'Sent').length,
-		alerts_failed: alerts.filter((a) => a.status === 'Failed').length,
-		alerts_pending: alerts.filter((a) => a.status === 'Pending').length,
+		alerts_sent: 0,
+		alerts_failed: 0,
+		alerts_pending: 0,
 		uptime_ticks: Number(health.engine.watermark_count) * 30,
 		last_sync: health.engine.last_tick
 	};
@@ -167,6 +151,10 @@ export async function saveConfig(config: GuardianConfigRecord): Promise<Guardian
 
 export function isLiveMode(): boolean {
 	return !USE_MOCK;
+}
+
+export function isOperatorModeEnabled(): boolean {
+	return getEnv('VITE_ENABLE_OPERATOR_ROUTES') === 'true';
 }
 
 export function getActiveCanisterIds(): { engine: string; config: string } {
