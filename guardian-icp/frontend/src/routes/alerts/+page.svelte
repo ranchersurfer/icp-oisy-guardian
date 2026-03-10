@@ -1,26 +1,35 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchAlerts, isOperatorModeEnabled } from '$lib/canister';
+	import { fetchAlerts } from '$lib/canister';
+	import { authState } from '$lib/auth';
 	import type { AlertRecord } from '$lib/types';
 
 	let alerts: AlertRecord[] = [];
 	let loading = true;
 	let error = '';
-	const operatorMode = isOperatorModeEnabled();
+
+	function formatTimestamp(value: bigint): string {
+		return new Date(Number(value / BigInt(1_000_000))).toLocaleString();
+	}
+
+	function severityClasses(severity: AlertRecord['severity']): string {
+		switch (severity) {
+			case 'EMERGENCY':
+				return 'border-rose-400/30 bg-rose-400/10 text-rose-100';
+			case 'CRITICAL':
+				return 'border-amber-400/30 bg-amber-400/10 text-amber-100';
+			case 'WARN':
+				return 'border-yellow-400/30 bg-yellow-400/10 text-yellow-100';
+			default:
+				return 'border-cyan-400/30 bg-cyan-400/10 text-cyan-100';
+		}
+	}
 
 	onMount(async () => {
-		if (!operatorMode) {
-			loading = false;
-			return;
-		}
-
 		try {
-			alerts = await fetchAlerts();
-			if (alerts.length === 0) {
-				error = 'Broad alert history is intentionally unavailable in the consumer frontend until the backend exposes an explicitly caller-scoped or controller-scoped method.';
-			}
+			alerts = await fetchAlerts(20);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Failed to load alert history.';
+			error = cause instanceof Error ? cause.message : 'Failed to load your alerts.';
 		} finally {
 			loading = false;
 		}
@@ -28,26 +37,61 @@
 </script>
 
 <div class="space-y-6">
-	<h1 class="text-2xl font-bold text-white">🚨 Operator Alert History</h1>
-	<p class="text-sm text-gray-500">This path is now gated. It does not show mock multi-user history and stays disabled until the source API is explicitly scoped and reviewed.</p>
+	<div class="space-y-2">
+		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Alerts</div>
+		<h1 class="text-4xl font-semibold text-white">Your Guardian alert history</h1>
+		<p class="max-w-3xl text-slate-300">
+			These alerts belong only to your connected Internet Identity
+			{#if $authState.principal}
+				<span class="font-mono text-slate-200">{$authState.principal}</span>
+			{/if}.
+			Guardian shows only your own alert history here.
+		</p>
+	</div>
 
-	{#if !operatorMode}
-		<div class="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-5 text-amber-100">
-			This route is hidden in normal consumer mode.
-		</div>
-	{:else if loading}
-		<div class="text-gray-500 animate-pulse">Checking alert history availability…</div>
-	{:else}
-		<div class="rounded-2xl border border-white/10 bg-slate-900/70 p-6">
-			<div class="text-lg font-semibold text-white">Alert history gated</div>
-			<p class="mt-3 max-w-3xl text-sm text-slate-300">
-				{error || 'The frontend is intentionally not rendering broad alert history here. Expose a reviewed get_my_alerts() or controller-only endpoint before re-enabling this screen.'}
+	{#if loading}
+		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-slate-300">Loading your alert history…</div>
+	{:else if error}
+		<div class="rounded-3xl border border-rose-400/30 bg-rose-400/10 p-6 text-rose-100">{error}</div>
+	{:else if alerts.length === 0}
+		<div class="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
+			<h2 class="text-xl font-semibold text-white">No alerts yet</h2>
+			<p class="mt-3 max-w-2xl text-sm text-slate-300">
+				You’re all clear for now. When Guardian detects suspicious activity for your connected identity, your personal alert history will appear here.
 			</p>
-			<ul class="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-400">
-				<li>No mock fallback is used on this private route.</li>
-				<li>No other users’ alert summaries are rendered.</li>
-				<li>Preferred follow-up: add a caller-scoped <code>get_my_alerts()</code> method for consumer use.</li>
-			</ul>
+		</div>
+	{:else}
+		<div class="grid gap-4">
+			{#each alerts as alert}
+				<article class="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
+					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+						<div>
+							<div class={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${severityClasses(alert.severity)}`}>
+								{alert.severity}
+							</div>
+							<div class="mt-3 text-lg font-semibold text-white">{alert.events_summary}</div>
+							<div class="mt-2 text-sm text-slate-400">Detected {formatTimestamp(alert.timestamp)}</div>
+						</div>
+						<div class="text-sm text-slate-400">Score {alert.severity_score}</div>
+					</div>
+
+					<div class="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
+						<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+							<div class="text-sm text-slate-400">Rules triggered</div>
+							<ul class="mt-3 space-y-2 text-sm text-slate-200">
+								{#each alert.rules_triggered as rule}
+									<li>• {rule}</li>
+								{/each}
+							</ul>
+						</div>
+
+						<div class="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+							<div class="text-sm text-cyan-100">Recommended action</div>
+							<p class="mt-3 text-sm text-cyan-50">{alert.recommended_action}</p>
+						</div>
+					</div>
+				</article>
+			{/each}
 		</div>
 	{/if}
 </div>

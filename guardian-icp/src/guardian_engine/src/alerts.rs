@@ -6,7 +6,7 @@ use crate::detector::{DetectionResult, Severity};
 use crate::{AlertRecord, AlertStatus, UnifiedEvent, ALERTS};
 
 // ---------------------------------------------------------------------------
-// AlertPayload
+// Alert payload / safe consumer view
 // ---------------------------------------------------------------------------
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
@@ -14,6 +14,17 @@ pub struct AlertPayload {
     pub alert_id: String,
     pub timestamp: u64,
     pub user: Principal,
+    pub severity: String,
+    pub severity_score: u8,
+    pub rules_triggered: Vec<String>,
+    pub events_summary: String,
+    pub recommended_action: String,
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq)]
+pub struct ConsumerAlertRecord {
+    pub alert_id: String,
+    pub timestamp: u64,
     pub severity: String,
     pub severity_score: u8,
     pub rules_triggered: Vec<String>,
@@ -89,6 +100,8 @@ pub fn format_alert(
         rules_triggered,
         severity: result.score,
         status: AlertStatus::Pending,
+        events_summary: payload.events_summary.clone(),
+        recommended_action: payload.recommended_action.clone(),
     };
 
     ALERTS.with(|a| {

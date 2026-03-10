@@ -1051,3 +1051,35 @@ Advice: dfx cycles convert --amount=0.123 --network testnet
 - `/home/ranch/.openclaw/workspace/tasks.json`
 - `/home/ranch/.openclaw/workspace/projects.json`
 - `/home/ranch/.openclaw/workspace/guardian-dev/DEV_LOG.md`
+
+
+## Phase 5: Safe Alert History + Consumer Alerts Page — 2026-03-10
+
+### Session: guardian-alert-history-sprint (Subagent)
+**Time**: 2026-03-10 10:07 PDT  
+**Status**: ✅ COMPLETE
+
+---
+
+### What Shipped
+- Added `guardian_engine.get_my_alerts(limit)` as a **caller-scoped query** returning only safe consumer alert fields.
+- Stored alert summaries/actions with alert records so consumer history can render useful context without exposing global multi-user data.
+- Added backend coverage for:
+  - caller sees own alerts
+  - caller cannot see others' alerts
+  - empty-state result
+- Replaced the gated `/alerts` placeholder with a real consumer alerts page that:
+  - loads only the connected user's alerts
+  - shows severity, triggered rules, timestamp, summary, and recommended action
+  - uses no mock fallback for private alert history
+  - clearly states alerts belong to the connected identity
+
+### Verification
+- `cargo test -p guardian_engine` ✅ (`276 passed`)
+- `frontend npm run check` ✅
+- `frontend npm run build` ✅
+- Verified build output includes `/alerts` route at `frontend/build/alerts.html` ✅
+
+### Notes
+- The backend DID and frontend IDL were updated together for `get_my_alerts(limit)` and `get_alert_queue_len()`.
+- Consumer alert history stays privacy-safe because the engine filters by `ic_cdk::caller()` before returning results.

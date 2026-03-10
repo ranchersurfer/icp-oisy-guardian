@@ -8,7 +8,7 @@ A lightweight SvelteKit admin dashboard for the Guardian ICP canister system. Pr
 |------|-------|-------------|
 | Health Status | `/` | Real-time engine health: cycles, timer state, watermark count, alert queue |
 | Configuration | `/config` | Active users, alert channels, detection rules (read-only) |
-| Alert History | `/alerts` | Last 100 alerts, filterable + sortable + paginated |
+| Alert History | `/alerts` | Caller-scoped personal alert history from `guardian_engine.get_my_alerts(limit)` |
 | System Stats | `/stats` | Delivery rates, chain/severity breakdowns, uptime |
 
 ## Architecture
@@ -43,12 +43,11 @@ frontend/
 ```
 fetchHealth()  → guardian_engine.get_health()         [live]
 fetchUsers()   → guardian_config.get_config()          [live, anonymous principal]
-fetchAlerts()  → guardian_engine.get_alerts()          [mock gracefully — not in DID yet]
+fetchAlerts()  → guardian_engine.get_my_alerts(limit) [live, caller-scoped, no mock fallback]
 fetchStats()   → derived from health + alert counts    [mixed]
 ```
 
-When `VITE_USE_MOCK=true` or a canister is unreachable, mock data is used automatically.
-A status indicator in the top-right corner shows **Live** or **Mock Data Mode**.
+Private alert history does **not** fall back to mock data. In normal consumer mode, `/alerts` only renders caller-scoped live data from the engine canister.
 
 ## Environment Setup
 

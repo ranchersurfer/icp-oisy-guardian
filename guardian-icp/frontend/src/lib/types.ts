@@ -33,14 +33,14 @@ export type AlertSeverity = 'INFO' | 'WARN' | 'CRITICAL' | 'EMERGENCY';
 export interface AlertRecord {
 	alert_id: string;
 	timestamp: bigint;
-	user: string;
 	rules_triggered: string[];
 	severity: AlertSeverity;
 	severity_score: number;
-	status: AlertStatus;
 	events_summary: string;
 	recommended_action: string;
-	chain: 'ICP' | 'CkBTC' | 'CkETH';
+	user?: string;
+	status?: AlertStatus;
+	chain?: 'ICP' | 'CkBTC' | 'CkETH';
 }
 
 export interface SystemStats {

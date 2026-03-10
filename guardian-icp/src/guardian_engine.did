@@ -1,3 +1,13 @@
+type ConsumerAlertRecord = record {
+    alert_id : text;
+    timestamp : nat64;
+    severity : text;
+    severity_score : nat8;
+    rules_triggered : vec text;
+    events_summary : text;
+    recommended_action : text;
+};
+
 type EngineHealthStatus = record {
     cycle_balance : nat64;
     last_tick : nat64;
@@ -7,5 +17,7 @@ type EngineHealthStatus = record {
 
 service : {
     get_health : () -> (EngineHealthStatus) query;
+    get_my_alerts : (nat64) -> (vec ConsumerAlertRecord) query;
+    get_alert_queue_len : () -> (nat64) query;
     set_config_canister_id : (principal) -> ();
 }

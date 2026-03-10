@@ -218,6 +218,8 @@ mod integration_tests {
             rules_triggered: vec!["A1".to_string(), "A3".to_string()],
             severity: 7,
             status: AlertStatus::Pending,
+            events_summary: "upgrade-summary".to_string(),
+            recommended_action: "upgrade-action".to_string(),
         };
         let bytes = record.to_bytes();
         let restored = AlertRecord::from_bytes(bytes);
@@ -255,6 +257,8 @@ mod integration_tests {
             rules_triggered: vec![],
             severity: 3,
             status: AlertStatus::Sent,
+            events_summary: "sent-summary".to_string(),
+            recommended_action: "sent-action".to_string(),
         };
         let restored = AlertRecord::from_bytes(record.to_bytes());
         assert_eq!(restored.status, AlertStatus::Sent);
@@ -269,6 +273,8 @@ mod integration_tests {
             rules_triggered: vec!["A1".to_string()],
             severity: 7,
             status: AlertStatus::Failed,
+            events_summary: "fail-summary".to_string(),
+            recommended_action: "fail-action".to_string(),
         };
         let restored = AlertRecord::from_bytes(record.to_bytes());
         assert_eq!(restored.status, AlertStatus::Failed);

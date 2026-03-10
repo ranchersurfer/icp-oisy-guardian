@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use alerts::format_alert;
+use alerts::{format_alert, ConsumerAlertRecord};
 use canisters::{MAX_EVENTS_PER_USER, MAX_SEEN_TX_IDS_PER_USER};
 #[allow(unused_imports)]
 use delivery::AlertChannel;
@@ -119,6 +119,8 @@ pub struct AlertRecord {
     pub rules_triggered: Vec<String>,
     pub severity: u8,
     pub status: AlertStatus,
+    pub events_summary: String,
+    pub recommended_action: String,
 }
 
 impl Storable for AlertRecord {
@@ -1015,6 +1017,40 @@ fn get_health() -> EngineHealthStatus {
     }
 }
 
+fn get_alerts_for_user(user: Principal, limit: usize) -> Vec<ConsumerAlertRecord> {
+    let mut alerts = ALERTS.with(|a| {
+        a.borrow()
+            .iter()
+            .filter_map(|(_, record)| {
+                if record.user != user {
+                    return None;
+                }
+
+                Some(ConsumerAlertRecord {
+                    alert_id: record.alert_id.clone(),
+                    timestamp: record.timestamp,
+                    severity: detector::Severity::from_score(record.severity).as_str().to_string(),
+                    severity_score: record.severity,
+                    rules_triggered: record.rules_triggered.clone(),
+                    events_summary: record.events_summary.clone(),
+                    recommended_action: record.recommended_action.clone(),
+                })
+            })
+            .collect::<Vec<_>>()
+    });
+
+    alerts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp).then_with(|| a.alert_id.cmp(&b.alert_id)));
+    alerts.truncate(limit);
+    alerts
+}
+
+#[query]
+fn get_my_alerts(limit: u64) -> Vec<ConsumerAlertRecord> {
+    let caller = caller();
+    let safe_limit = usize::try_from(limit.min(100)).unwrap_or(100);
+    get_alerts_for_user(caller, safe_limit)
+}
+
 // ---------------------------------------------------------------------------
 // Query endpoints (Phase 2b additions)
 // ---------------------------------------------------------------------------
@@ -1155,6 +1191,8 @@ mod tests {
             rules_triggered: vec!["large_transfer".to_string()],
             severity: 7,
             status: AlertStatus::Pending,
+            events_summary: String::new(),
+            recommended_action: String::new(),
         };
         assert_eq!(rec.alert_id, "alert-001");
         assert_eq!(rec.severity, 7);
@@ -1170,6 +1208,8 @@ mod tests {
             rules_triggered: vec![],
             severity: 3,
             status: AlertStatus::Pending,
+            events_summary: String::new(),
+            recommended_action: String::new(),
         };
         assert_eq!(rec.status, AlertStatus::Pending);
         rec.status = AlertStatus::Sent;
@@ -1187,6 +1227,8 @@ mod tests {
             rules_triggered: vec!["rapid_tx".to_string(), "new_address".to_string()],
             severity: 10,
             status: AlertStatus::Sent,
+            events_summary: "2 rapid transactions".to_string(),
+            recommended_action: "Verify recent activity".to_string(),
         };
         let bytes = rec.to_bytes();
         let rec2 = AlertRecord::from_bytes(bytes);
@@ -1715,6 +1757,66 @@ mod tests {
             let now_ns = cached_at + CHANNEL_CACHE_TTL_NS;
             let is_fresh = now_ns.saturating_sub(cached_at) < CHANNEL_CACHE_TTL_NS;
             assert!(!is_fresh, "At TTL exactly should be expired");
+        }
+    }
+
+    // =========================================================================
+    // Safe caller-scoped alert history tests
+    // =========================================================================
+
+    mod my_alerts_tests {
+        use super::*;
+
+        fn seed_alert(user: Principal, alert_id: &str, timestamp: u64, severity: u8) {
+            ALERTS.with(|alerts| {
+                alerts.borrow_mut().insert(
+                    alert_id.to_string(),
+                    AlertRecord {
+                        alert_id: alert_id.to_string(),
+                        timestamp,
+                        user,
+                        rules_triggered: vec!["A1: Large transfer".to_string()],
+                        severity,
+                        status: AlertStatus::Sent,
+                        events_summary: format!("summary-{alert_id}"),
+                        recommended_action: format!("action-{alert_id}"),
+                    },
+                );
+            });
+        }
+
+        #[test]
+        fn test_get_alerts_for_user_returns_only_callers_alerts() {
+            let caller = Principal::from_slice(&[230u8; 29]);
+            let other = Principal::from_slice(&[231u8; 29]);
+            seed_alert(caller, "mine-1", 300, 7);
+            seed_alert(other, "theirs-1", 400, 10);
+            seed_alert(caller, "mine-2", 500, 3);
+
+            let alerts = get_alerts_for_user(caller, 10);
+
+            assert_eq!(alerts.len(), 2);
+            assert!(alerts.iter().all(|alert| alert.alert_id.starts_with("mine-")));
+            assert_eq!(alerts[0].alert_id, "mine-2");
+            assert_eq!(alerts[1].alert_id, "mine-1");
+        }
+
+        #[test]
+        fn test_get_alerts_for_user_cannot_see_other_users_alerts() {
+            let caller = Principal::from_slice(&[232u8; 29]);
+            let other = Principal::from_slice(&[233u8; 29]);
+            seed_alert(other, "other-only", 900, 15);
+
+            let alerts = get_alerts_for_user(caller, 10);
+
+            assert!(alerts.iter().all(|alert| alert.alert_id != "other-only"));
+        }
+
+        #[test]
+        fn test_get_alerts_for_user_empty_state_works() {
+            let caller = Principal::from_slice(&[234u8; 29]);
+            let alerts = get_alerts_for_user(caller, 10);
+            assert!(alerts.is_empty());
         }
     }
 

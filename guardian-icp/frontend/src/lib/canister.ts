@@ -1,6 +1,5 @@
 import {
 	fetchHealth as mockFetchHealth,
-	fetchAlerts as mockFetchAlerts,
 	fetchStats as mockFetchStats
 } from './mock.js';
 import { createConfigActor, createEngineActor, CANISTER_IDS } from './auth.js';
@@ -120,9 +119,39 @@ export async function fetchUsers(): Promise<UserConfig[]> {
 	return [];
 }
 
-export async function fetchAlerts(): Promise<AlertRecord[]> {
+function normalizeSeverity(raw: string): AlertRecord['severity'] {
+	const normalized = raw.toUpperCase();
+	if (normalized === 'INFO' || normalized === 'WARN' || normalized === 'CRITICAL' || normalized === 'EMERGENCY') {
+		return normalized;
+	}
+	return 'INFO';
+}
+
+interface RawConsumerAlertRecord {
+	alert_id: string;
+	timestamp: bigint;
+	severity: string;
+	severity_score: bigint | number;
+	rules_triggered: string[];
+	events_summary: string;
+	recommended_action: string;
+}
+
+export async function fetchAlerts(limit = 20): Promise<AlertRecord[]> {
 	if (USE_MOCK) return [];
-	return [];
+
+	const engine = (await createEngineActor()) as any;
+	const rawAlerts = (await engine.get_my_alerts(BigInt(limit))) as RawConsumerAlertRecord[];
+
+	return rawAlerts.map((alert) => ({
+		alert_id: alert.alert_id,
+		timestamp: BigInt(alert.timestamp),
+		rules_triggered: alert.rules_triggered,
+		severity: normalizeSeverity(alert.severity),
+		severity_score: Number(alert.severity_score),
+		events_summary: alert.events_summary,
+		recommended_action: alert.recommended_action
+	}));
 }
 
 export async function fetchStats(): Promise<SystemStats> {
