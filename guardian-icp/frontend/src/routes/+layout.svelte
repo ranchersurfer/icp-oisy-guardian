@@ -15,7 +15,8 @@
 		{ href: '/', label: 'Home' },
 		{ href: '/onboarding', label: 'Onboarding' },
 		{ href: '/review', label: 'Review' },
-		{ href: '/dashboard', label: 'Dashboard' }
+		{ href: '/dashboard', label: 'Dashboard' },
+		{ href: '/settings', label: 'Settings' }
 	];
 
 	const operatorNav = [

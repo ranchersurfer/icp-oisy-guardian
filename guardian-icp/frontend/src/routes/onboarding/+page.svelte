@@ -1,15 +1,36 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { authState } from '$lib/auth';
-	import { PRESETS, selectedPreset } from '$lib/guardian';
+	import { getMyConfig } from '$lib/canister';
+	import { PRESETS, detectPreset, selectedPreset } from '$lib/guardian';
 	import type { GuardianPresetId } from '$lib/types';
 
 	let selected: GuardianPresetId = 'balanced';
+	let editMode = false;
+	let helperCopy = 'Pick a starting point. Balanced is the recommended default for most Guardian users.';
 	selectedPreset.set(selected);
 
+	$: editMode = $page.url.searchParams.get('mode') === 'edit';
 	$: if (!$authState.isAuthenticated) {
 		goto('/');
 	}
+
+	onMount(async () => {
+		if (!$authState.isAuthenticated) return;
+		if (!editMode) return;
+		try {
+			const result = await getMyConfig();
+			if ('Ok' in result) {
+				selected = detectPreset(result.Ok) ?? 'balanced';
+				selectedPreset.set(selected);
+				helperCopy = 'We prefilled this from your current live config so you can safely switch presets or run setup again.';
+			}
+		} catch {
+			helperCopy = 'Could not preload your current config, but you can still choose a preset and continue.';
+		}
+	});
 
 	function choose(id: GuardianPresetId) {
 		selected = id;
@@ -17,15 +38,16 @@
 	}
 
 	async function continueToReview() {
-		await goto('/review');
+		const suffix = editMode ? '?mode=edit' : '';
+		await goto(`/review${suffix}`);
 	}
 </script>
 
 <div class="space-y-8">
 	<div class="space-y-2">
-		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Onboarding</div>
-		<h1 class="text-4xl font-semibold text-white">Choose your protection level</h1>
-		<p class="max-w-2xl text-slate-300">Pick a starting point. Balanced is the recommended default for most Guardian users.</p>
+		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">{editMode ? 'Re-onboarding' : 'Onboarding'}</div>
+		<h1 class="text-4xl font-semibold text-white">{editMode ? 'Choose a new protection setup' : 'Choose your protection level'}</h1>
+		<p class="max-w-2xl text-slate-300">{helperCopy}</p>
 	</div>
 
 	<div class="grid gap-4 lg:grid-cols-3">
@@ -59,7 +81,7 @@
 			<div class="mt-1 font-mono text-sm text-slate-200">{$authState.principal}</div>
 		</div>
 		<button on:click={continueToReview} class="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-			Review protection
+			{editMode ? 'Review updated protection' : 'Review protection'}
 		</button>
 	</div>
 </div>

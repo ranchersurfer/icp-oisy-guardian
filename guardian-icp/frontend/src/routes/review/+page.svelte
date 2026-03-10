@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { authState } from '$lib/auth';
 	import { getMyConfig, saveConfig } from '$lib/canister';
 	import { buildConfigForPreset, formatPercent, formatRapidWindow, getPreset, selectedPreset } from '$lib/guardian';
@@ -12,9 +13,11 @@
 	let success = '';
 	let presetId: GuardianPresetId = get(selectedPreset);
 	let existing: GuardianConfigRecord | undefined;
+	let editMode = false;
 
 	$: presetId = get(selectedPreset);
 	$: preset = getPreset(presetId);
+	$: editMode = $page.url.searchParams.get('mode') === 'edit';
 	$: if (!$authState.isAuthenticated) {
 		goto('/');
 	}
@@ -44,7 +47,7 @@
 				throw new Error(`Saved, but read-back failed: ${readBack.Err}`);
 			}
 
-			success = 'Protection saved on the live guardian_config canister.';
+			success = editMode ? 'Updated protection saved on the live guardian_config canister.' : 'Protection saved on the live guardian_config canister.';
 			await goto('/dashboard');
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Failed to save Guardian protection.';
@@ -56,8 +59,8 @@
 
 <div class="space-y-8">
 	<div class="space-y-2">
-		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Review & confirm</div>
-		<h1 class="text-4xl font-semibold text-white">Check what Guardian will save</h1>
+		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">{editMode ? 'Review update' : 'Review & confirm'}</div>
+		<h1 class="text-4xl font-semibold text-white">{editMode ? 'Check your updated Guardian setup' : 'Check what Guardian will save'}</h1>
 		<p class="max-w-2xl text-slate-300">This writes your preset configuration under your connected principal on the live Internet Computer deployment.</p>
 	</div>
 
@@ -103,9 +106,9 @@
 				Guardian stores monitoring preferences on the live <code>guardian_config</code> canister. It does not move funds or request your seed phrase.
 			</div>
 			<button on:click={confirmAndSave} disabled={saving} class="w-full rounded-full bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60">
-				{saving ? 'Saving to live canister…' : 'Save protection'}
+				{saving ? 'Saving to live canister…' : editMode ? 'Save updated protection' : 'Save protection'}
 			</button>
-			<a href="/onboarding" class="block text-center text-sm text-cyan-100 underline decoration-cyan-300/30 underline-offset-4">Back to presets</a>
+			<a href={editMode ? '/onboarding?mode=edit' : '/onboarding'} class="block text-center text-sm text-cyan-100 underline decoration-cyan-300/30 underline-offset-4">Back to presets</a>
 		</div>
 	</div>
 

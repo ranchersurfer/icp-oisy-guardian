@@ -111,7 +111,7 @@ export function buildConfigForPreset(presetId: GuardianPresetId, owner: Principa
 	return {
 		owner,
 		created_at: existing?.created_at ?? now,
-		updated_at: existing?.updated_at ?? now,
+		updated_at: now,
 		monitored_chains: [...preset.config.monitored_chains],
 		large_transfer_pct: preset.config.large_transfer_pct,
 		daily_outflow_pct: preset.config.daily_outflow_pct,
@@ -123,6 +123,17 @@ export function buildConfigForPreset(presetId: GuardianPresetId, owner: Principa
 		alert_channels: existing?.alert_channels ?? [],
 		allowlisted_addresses: existing?.allowlisted_addresses ?? []
 	};
+}
+
+export function parseLineList(raw: string): string[] {
+	return raw
+		.split('\n')
+		.map((item) => item.trim())
+		.filter(Boolean);
+}
+
+export function formatLineList(values: string[]): string {
+	return values.join('\n');
 }
 
 export function mapConfigResultToView(result: GuardianConfigResult): GuardianConfigView | null {

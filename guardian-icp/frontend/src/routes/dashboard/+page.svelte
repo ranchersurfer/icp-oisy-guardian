@@ -54,15 +54,20 @@
 </script>
 
 <div class="space-y-8">
-	<div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+	<div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 		<div>
 			<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Dashboard</div>
 			<h1 class="text-4xl font-semibold text-white">Your Guardian protection state</h1>
 			<p class="mt-2 max-w-2xl text-slate-300">Real saved state from the live config canister, tied to your connected Internet Identity principal.</p>
 		</div>
-		<a href="/onboarding" class="inline-flex rounded-full border border-white/15 px-5 py-3 text-sm text-slate-200 transition hover:bg-white/10">
-			Future quick action: edit settings
-		</a>
+		<div class="flex flex-wrap gap-3">
+			<a href="/settings" class="inline-flex rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+				Edit settings
+			</a>
+			<a href="/onboarding?mode=edit" class="inline-flex rounded-full border border-white/15 px-5 py-3 text-sm text-slate-200 transition hover:bg-white/10">
+				Re-run onboarding
+			</a>
+		</div>
 	</div>
 
 	{#if loading}

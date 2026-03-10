@@ -1,9 +1,9 @@
 {
   "guardian-dev": {
-    "status": "working",
-    "current_task": "Privacy Hardening Sprint",
-    "last_updated": "2026-03-09T16:51:12Z",
-    "note": "Privacy hardening finished in frontend: masked destinations, operator routes hidden by default, private pages fail closed, alert history UI gated pending scoped backend APIs, frontend build verified."
+    "status": "idle",
+    "current_task": null,
+    "last_updated": "2026-03-10T03:00:00Z",
+    "note": "Completed the consumer settings/reconfiguration sprint: dashboard now links to /settings and /onboarding?mode=edit, existing users can load and update live guardian_config state without a new identity, and frontend verification passed with npm run check and npm run build."
   },
   "dream-cycle": {
     "status": "idle",

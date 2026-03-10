@@ -930,6 +930,51 @@ Advice: dfx cycles convert --amount=0.123 --network testnet
   - `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
   - `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`
 
+## Frontend IC Deployment + Real-Origin II Validation — 2026-03-09
+
+### Session: guardian-frontend-ic-deploy (Subagent)
+**Time**: 2026-03-09 14:55 PDT  
+**Status**: 🚧 IN PROGRESS  
+**Guardian-Dev Status**: working
+
+### Progress note
+- Began IC frontend deployment run for the consumer UI.
+- Verifying production env wiring against live IC canisters `higkb-faaaa-aaaau-ae5cq-cai` and `dyqi7-riaaa-aaaau-afmla-cai`.
+- Confirmed current deploy script needs correction because it writes `.env.deploy`, which Vite does not automatically load for `npm run build`.
+- Next steps: add/confirm `guardian_frontend` asset canister in `dfx.json`, build with explicit IC env vars, deploy on IC with funded identity, then verify public asset serving and real-origin II readiness.
+
+### Completion note
+- Added and confirmed `guardian_frontend` asset canister in `guardian-icp/dfx.json` pointing at `frontend/build`.
+- Built the consumer frontend for IC production against live backend canisters:
+  - `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
+  - `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`
+- Production build used:
+  - `VITE_CANISTER_NETWORK=ic`
+  - `VITE_USE_MOCK=false`
+  - `VITE_ENABLE_OPERATOR_ROUTES=false`
+  - `VITE_IC_HOST=https://icp0.io`
+- Fixed the frontend deploy script so it now passes Vite env vars inline during the build instead of writing an unused `.env.deploy` file.
+- Converted additional ICP to cycles as needed during the deploy run:
+  - block `34642187` → `182_340_000_000` cycles
+  - block `34642198` → `455_850_000_000` cycles
+  - block `34642226` → `273_510_000_000` cycles
+- Created and deployed IC asset canister:
+  - `guardian_frontend` → `igg2b-kaaaa-aaaau-afnuq-cai`
+- Public URL:
+  - `https://igg2b-kaaaa-aaaau-afnuq-cai.icp0.io`
+- Runtime/public verification:
+  - `/` served with HTTP 200
+  - `/onboarding` served with HTTP 200
+  - `/review` served with HTTP 200
+  - `/dashboard` served with HTTP 200
+  - built assets contain live IC backend IDs and `https://identity.ic0.app`
+- Internet Identity status:
+  - real-origin manual testing is now ready from the deployed IC/web origin
+  - not fully browser-validated inside this subagent; a human still needs to click through the II popup/login flow end to end
+- Deployment warning noted for later:
+  - asset canister currently warns that `.ic-assets.json5` security policy is not defined
+  - deployment succeeded anyway, but adding an explicit asset security policy is recommended next
+
 ## Privacy Hardening Sprint — 2026-03-09
 
 ### Session: guardian-privacy-hardening (Subagent)
@@ -949,3 +994,60 @@ Advice: dfx cycles convert --amount=0.123 --network testnet
 - Route outputs verified in static build: `/`, `/onboarding`, `/review`, `/dashboard`, `/config`, `/alerts`, `/stats`.
 - Disabled/gated: broad alert-history UI remains intentionally disabled until a reviewed caller-scoped `get_my_alerts()` or controller-only method exists.
 - Remaining later-sprint recommendation: move raw alert destination storage away from plaintext-like on-chain strings and toward encrypted/vetKeys-aware handling before making stronger privacy claims.
+
+## Phase 5 Sprint 2: Settings editor + re-onboarding / reset path — 2026-03-09
+
+### Session: guardian-settings-sprint (Subagent)
+**Time**: 2026-03-09 20:44 PDT  
+**Status**: ✅ IMPLEMENTED / BUILD-VERIFIED  
+**Guardian-Dev Status**: idle
+
+### What Was Built
+- Added a real consumer **`/settings`** route for existing users.
+- Dashboard now exposes two clear reconfiguration actions:
+  - **Edit settings** → `/settings`
+  - **Re-run onboarding** → `/onboarding?mode=edit`
+- Re-onboarding now detects edit mode and preloads the current live config when available so the current preset is selected by default.
+- Settings editor loads the caller’s live config from `guardian_config.get_config()`, lets them update:
+  - preset
+  - large transfer threshold
+  - rapid tx count/window
+  - new-address alert toggle
+  - alert threshold
+  - emergency threshold
+  - monitored chains
+  - alert destinations
+  - allowlisted addresses
+- Saving on `/settings` writes back through live `guardian_config.set_config()`, reads back the saved state, and returns to `/dashboard`.
+- Review/save flow also supports edit mode via `/review?mode=edit`.
+- Fixed config writes so `updated_at` is refreshed on save instead of reusing the prior timestamp.
+
+### Privacy / UX notes preserved
+- Existing privacy hardening remains in place:
+  - operator routes stay gated behind `VITE_ENABLE_OPERATOR_ROUTES=true`
+  - dashboard still masks saved destination values in normal display
+  - no mock fallback was reintroduced on private routes
+- The settings UI stays consumer-first and does not expose raw canister/Candid concepts beyond short storage notes.
+
+### Verification
+- `npm run check` ✅
+- `npm run build` ✅
+- Static build outputs verified for:
+  - `/`
+  - `/onboarding`
+  - `/review`
+  - `/dashboard`
+  - `/settings`
+- Live config read/write path is wired through the same `getMyConfig()` / `saveConfig()` canister helpers used by the consumer flow.
+
+### Files Changed
+- `guardian-icp/frontend/src/lib/guardian.ts`
+- `guardian-icp/frontend/src/routes/+layout.svelte`
+- `guardian-icp/frontend/src/routes/dashboard/+page.svelte`
+- `guardian-icp/frontend/src/routes/onboarding/+page.svelte`
+- `guardian-icp/frontend/src/routes/review/+page.svelte`
+- `guardian-icp/frontend/src/routes/settings/+page.svelte`
+- `/home/ranch/.openclaw/workspace/agent-status.json`
+- `/home/ranch/.openclaw/workspace/tasks.json`
+- `/home/ranch/.openclaw/workspace/projects.json`
+- `/home/ranch/.openclaw/workspace/guardian-dev/DEV_LOG.md`
