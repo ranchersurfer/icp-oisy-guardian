@@ -1,1 +1,149 @@
 @import "tailwindcss";
+
+:root {
+	color-scheme: dark;
+	--guardian-bg: #050b16;
+	--guardian-panel: rgba(15, 23, 42, 0.72);
+	--guardian-panel-strong: rgba(15, 23, 42, 0.92);
+	--guardian-border: rgba(148, 163, 184, 0.14);
+	--guardian-text: #e2e8f0;
+	--guardian-muted: #94a3b8;
+	--guardian-brand: #67e8f9;
+	--guardian-brand-strong: #22d3ee;
+}
+
+html {
+	background:
+		radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 28%),
+		radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 30%),
+		linear-gradient(180deg, #020617 0%, #06101d 45%, #040814 100%);
+	background-color: var(--guardian-bg);
+	scroll-behavior: smooth;
+}
+
+body {
+	min-height: 100vh;
+	color: var(--guardian-text);
+	font-feature-settings: 'ss01' on, 'cv02' on, 'cv03' on;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+}
+
+body::selection {
+	background: rgba(103, 232, 249, 0.3);
+	color: white;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+	touch-action: manipulation;
+}
+
+button,
+input,
+textarea,
+select {
+	outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+	outline: 2px solid rgba(103, 232, 249, 0.85);
+	outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+	font-size: 16px;
+}
+
+code {
+	font-size: 0.92em;
+}
+
+@layer components {
+	.guardian-shell {
+		@apply min-h-screen text-slate-100;
+		background:
+			radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 28%),
+			linear-gradient(180deg, rgba(2, 6, 23, 0.94), rgba(2, 6, 23, 0.98));
+	}
+
+	.guardian-glass {
+		@apply border backdrop-blur-xl;
+		background: var(--guardian-panel);
+		border-color: var(--guardian-border);
+		box-shadow: 0 16px 60px rgba(2, 6, 23, 0.24);
+	}
+
+	.guardian-glass-strong {
+		@apply border backdrop-blur-xl;
+		background: var(--guardian-panel-strong);
+		border-color: rgba(148, 163, 184, 0.16);
+		box-shadow: 0 18px 70px rgba(2, 6, 23, 0.32);
+	}
+
+	.guardian-card {
+		@apply rounded-[1.75rem] border p-5 sm:p-6;
+		background: rgba(15, 23, 42, 0.7);
+		border-color: rgba(148, 163, 184, 0.14);
+		box-shadow: 0 12px 40px rgba(2, 6, 23, 0.18);
+	}
+
+	.guardian-section-title {
+		@apply text-3xl font-semibold tracking-tight text-white sm:text-4xl;
+	}
+
+	.guardian-kicker {
+		@apply text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200 sm:text-xs;
+	}
+
+	.guardian-input {
+		@apply w-full rounded-2xl border bg-slate-950/70 px-4 py-3.5 text-white placeholder:text-slate-500;
+		border-color: rgba(148, 163, 184, 0.14);
+	}
+
+	.guardian-textarea {
+		@apply w-full min-h-[7rem] resize-y rounded-2xl border bg-slate-950/70 px-4 py-3.5 text-white placeholder:text-slate-500;
+		border-color: rgba(148, 163, 184, 0.14);
+	}
+
+	.guardian-button-primary {
+		@apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-slate-950 transition sm:px-6;
+		background: linear-gradient(135deg, #67e8f9, #22d3ee);
+		box-shadow: 0 12px 30px rgba(34, 211, 238, 0.25);
+	}
+
+	.guardian-button-primary:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 16px 34px rgba(34, 211, 238, 0.32);
+	}
+
+	.guardian-button-secondary {
+		@apply inline-flex items-center justify-center rounded-full border px-5 py-3 text-sm text-slate-100 transition sm:px-6;
+		border-color: rgba(255, 255, 255, 0.12);
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.guardian-button-secondary:hover {
+		background: rgba(255, 255, 255, 0.08);
+		border-color: rgba(255, 255, 255, 0.18);
+	}
+
+	.guardian-stat {
+		@apply rounded-3xl border p-5;
+		background: rgba(255, 255, 255, 0.04);
+		border-color: rgba(148, 163, 184, 0.14);
+	}
+
+	.guardian-badge {
+		@apply inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em];
+	}
+}

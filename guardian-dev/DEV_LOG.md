@@ -1,5 +1,54 @@
 # Guardian-Dev Log
 
+## Phase 5: Consumer UI polish + mobile-friendly UX — 2026-03-10
+
+### Session: guardian-ui-polish-sprint (Subagent)
+**Time**: 2026-03-10 14:36 PDT  
+**Status**: ✅ COMPLETE / BUILD-VERIFIED  
+**Guardian-Dev Status**: idle
+
+### What Was Improved
+- Refined the **global consumer shell** with a more polished glass/dark visual system, stronger spacing, better visual hierarchy, and a more intentional mobile-friendly header/nav.
+- Improved the core consumer routes:
+  - `/` — sharper trust-first landing page with cleaner hero, trust checklist, and clearer onboarding framing
+  - `/onboarding` — more legible preset cards, stronger selection affordances, better small-screen card layout, and clearer edit-mode preload messaging
+  - `/review` — cleaner review hierarchy, better plain-language explanations, stronger save CTA panel, and clearer live-save expectations
+  - `/dashboard` — stronger summary cards, clearer quick actions, better destination privacy display, improved card hierarchy, and tighter live-state explanation
+  - `/settings` — more touch-friendly forms, better section grouping, better spacing, improved preset cards, and cleaner save/footer actions
+  - `/alerts` — better alert card structure, clearer empty state, and improved severity/recommended-action presentation
+
+### Mobile / UX Fixes
+- Added larger touch targets and more consistent control sizing for buttons, tabs, nav pills, inputs, and textareas.
+- Made the top navigation work better on small screens with horizontal scrolling instead of cramped wrapping.
+- Reduced visual crowding by reworking grids/stacks to collapse more cleanly on mobile.
+- Improved overflow handling for long principals and saved destination values with better wrapping and font sizing.
+- Added cleaner loading and empty states so pages feel intentional rather than unfinished while data loads or when a user has no alerts/destinations yet.
+
+### Privacy / Scope Notes
+- Preserved prior privacy-hardening behavior:
+  - operator routes remain gated
+  - private destination values remain masked in user-facing views
+  - no ambiguous mock fallback was reintroduced for private consumer routes
+- No new major product features were added; this sprint focused on presentation, responsiveness, and state polish only.
+
+### Verification
+- `npm run check` ✅
+- `npm run build` ✅
+
+### Files Changed
+- `guardian-icp/frontend/src/app.css`
+- `guardian-icp/frontend/src/routes/+layout.svelte`
+- `guardian-icp/frontend/src/routes/+page.svelte`
+- `guardian-icp/frontend/src/routes/onboarding/+page.svelte`
+- `guardian-icp/frontend/src/routes/review/+page.svelte`
+- `guardian-icp/frontend/src/routes/dashboard/+page.svelte`
+- `guardian-icp/frontend/src/routes/settings/+page.svelte`
+- `guardian-icp/frontend/src/routes/alerts/+page.svelte`
+- `/home/ranch/.openclaw/workspace/agent-status.json`
+- `/home/ranch/.openclaw/workspace/tasks.json`
+- `/home/ranch/.openclaw/workspace/projects.json`
+- `/home/ranch/.openclaw/workspace/guardian-dev/DEV_LOG.md`
+
 ## Phase 5: Consumer Productization Spec + Implementation Plan — 2026-03-08
 
 ### Session: guardian-dev-phase5-plan (Subagent)
@@ -246,7 +295,7 @@ Phase 4 task description assumed endpoints that aren't yet in the DID:
 **Build**: ✅ `npm run build` — zero errors  
 **Bundle size**: **200KB** (well under 2MB asset canister limit)  
 **Tailwind**: v4 via `@tailwindcss/vite` (no config file needed)  
-**Adapter**: `@sveltejs/adapter-static` — outputs static files for ICP asset canister
+**Adapter**: `@sveltejs/adapter-static` — outputs static files for ICP asset canister deployment
 
 ---
 
@@ -633,7 +682,7 @@ Added fields: `severity`, `severity_score`, `rules_triggered`, `events_summary`,
 
 **Guardian-Dev Status**: 🟢 Ready for Phase 2c
 
-
+---
 
 ## Phase 2a: Testnet Deployment — 2026-03-04
 

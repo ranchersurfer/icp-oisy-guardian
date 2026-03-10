@@ -212,5 +212,17 @@
     "created_at": "2026-03-09T21:56:00Z",
     "updated_at": "2026-03-09T21:56:00Z",
     "completed_at": "2026-03-09T21:56:00Z"
+  },
+  {
+    "id": "task-19",
+    "title": "Guardian Phase 5 \u2014 2026 UI polish + mobile-friendly consumer UX",
+    "description": "Polished the consumer shell and routes /, /onboarding, /review, /dashboard, /settings, and /alerts with a more modern visual system, cleaner hierarchy, stronger empty/loading states, and improved small-screen/touch layouts. Preserved operator gating, privacy masking, and no-mock private-route behavior. Verified frontend npm run check and npm run build.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-10T21:36:12Z",
+    "updated_at": "2026-03-10T21:36:12Z",
+    "completed_at": "2026-03-10T21:36:12Z"
   }
 ]

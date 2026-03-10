@@ -114,28 +114,26 @@
 			saving = false;
 		}
 	}
-
-	onMount(loadSettings);
 </script>
 
-<div class="space-y-8">
-	<div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+<div class="space-y-6 sm:space-y-8">
+	<div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 		<div>
-			<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Settings</div>
-			<h1 class="text-4xl font-semibold text-white">Edit your Guardian settings</h1>
-			<p class="mt-2 max-w-3xl text-slate-300">Update your preset, tune alert sensitivity, and manage trusted destinations without creating a new identity.</p>
+			<div class="guardian-kicker">Settings</div>
+			<h1 class="guardian-section-title">Edit your Guardian settings</h1>
+			<p class="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">Touch-friendly controls for preset changes, live threshold tuning, monitored chains, destinations, and trusted addresses.</p>
 		</div>
-		<a href="/onboarding?mode=edit" class="inline-flex rounded-full border border-white/15 px-5 py-3 text-sm text-slate-200 transition hover:bg-white/10">Re-run onboarding</a>
+		<a href="/onboarding?mode=edit" class="guardian-button-secondary min-h-12">Re-run onboarding</a>
 	</div>
 
 	{#if loading}
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-slate-300">Loading your live settings…</div>
+		<div class="guardian-card text-slate-300">Loading your live settings…</div>
 	{:else}
-		<div class="grid gap-4 lg:grid-cols-3">
+		<div class="grid gap-4 xl:grid-cols-3">
 			{#each PRESETS as preset}
 				<button
 					on:click={() => applyPreset(preset.id)}
-					class={`rounded-[1.5rem] border p-5 text-left transition ${presetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(103,232,249,0.3)]' : 'border-white/10 bg-slate-900/70 hover:border-white/20'}`}
+					class={`rounded-[1.75rem] border p-5 text-left transition sm:p-6 ${presetId === preset.id ? 'border-cyan-300 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(103,232,249,0.35),0_18px_55px_rgba(8,145,178,0.18)]' : 'border-white/10 bg-slate-900/70 hover:border-white/20 hover:bg-slate-900/90'}`}
 				>
 					<div class="flex items-start justify-between gap-3">
 						<div>
@@ -143,7 +141,7 @@
 							<div class="mt-1 text-sm text-slate-400">{preset.tagline}</div>
 						</div>
 						{#if preset.recommended}
-							<div class="rounded-full bg-cyan-400 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-950">Recommended</div>
+							<div class="guardian-badge border-cyan-300/20 bg-cyan-400 text-slate-950">Recommended</div>
 						{/if}
 					</div>
 					<div class="mt-4 space-y-2 text-sm text-slate-200">
@@ -154,69 +152,73 @@
 			{/each}
 		</div>
 
-		<div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-			<div class="space-y-6 rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
+		<div class="grid gap-6 xl:grid-cols-[1.06fr_0.94fr]">
+			<div class="guardian-card space-y-6">
 				<div>
-					<h2 class="text-xl font-semibold text-white">Advanced controls</h2>
-					<p class="mt-2 text-sm text-slate-400">Preset changes are safe and reversible. You can also fine-tune thresholds below.</p>
+					<h2 class="text-2xl font-semibold text-white">Advanced controls</h2>
+					<p class="mt-2 text-sm leading-6 text-slate-400">Preset changes are reversible. Use these controls when you want more granular behavior than a default profile.</p>
 				</div>
 
-				<div class="grid gap-4 md:grid-cols-2">
+				<div class="grid gap-4 sm:grid-cols-2">
 					<label class="space-y-2">
 						<span class="text-sm text-slate-300">Large transfer alert (% of balance)</span>
-						<input bind:value={largeTransferPct} type="number" min="0.01" max="1" step="0.01" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white" />
+						<input bind:value={largeTransferPct} type="number" min="0.01" max="1" step="0.01" class="guardian-input min-h-12" />
 					</label>
 					<label class="space-y-2">
 						<span class="text-sm text-slate-300">Rapid transaction count</span>
-						<input bind:value={rapidTxCount} type="number" min="1" step="1" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white" />
+						<input bind:value={rapidTxCount} type="number" min="1" step="1" class="guardian-input min-h-12" />
 					</label>
 					<label class="space-y-2">
 						<span class="text-sm text-slate-300">Rapid transaction window (seconds)</span>
-						<input bind:value={rapidTxWindowSecs} type="number" min="60" step="60" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white" />
+						<input bind:value={rapidTxWindowSecs} type="number" min="60" step="60" class="guardian-input min-h-12" />
 					</label>
 					<label class="space-y-2">
 						<span class="text-sm text-slate-300">Alert sensitivity threshold</span>
-						<input bind:value={alertThreshold} type="number" min="1" step="1" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white" />
+						<input bind:value={alertThreshold} type="number" min="1" step="1" class="guardian-input min-h-12" />
 					</label>
-					<label class="space-y-2 md:col-span-2">
+					<label class="space-y-2 sm:col-span-2">
 						<span class="text-sm text-slate-300">Emergency threshold</span>
-						<input bind:value={emergencyThreshold} type="number" min="1" step="1" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white" />
+						<input bind:value={emergencyThreshold} type="number" min="1" step="1" class="guardian-input min-h-12" />
 					</label>
 				</div>
 
-				<label class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-					<input bind:checked={newAddressAlert} type="checkbox" class="h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-400" />
-					Alert me when funds move to a new address
+				<label class="flex items-start gap-3 rounded-[1.4rem] border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-200">
+					<input bind:checked={newAddressAlert} type="checkbox" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-950 text-cyan-400" />
+					<span>Alert me when funds move to a new address that hasn’t been allowlisted yet.</span>
 				</label>
 			</div>
 
-			<div class="space-y-6 rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
+			<div class="guardian-card space-y-6">
 				<div>
-					<h2 class="text-xl font-semibold text-white">Destinations and allowlist</h2>
-					<p class="mt-2 text-sm text-slate-400">One value per line. Example channel formats: <code>email;address=name@example.com</code> or <code>discord;url=https://discord.com/api/webhooks/...</code></p>
+					<h2 class="text-2xl font-semibold text-white">Destinations and allowlist</h2>
+					<p class="mt-2 text-sm leading-6 text-slate-400">One value per line. Example channel formats: <code>email;address=name@example.com</code> or <code>discord;url=https://discord.com/api/webhooks/...</code></p>
 				</div>
 
-				<label class="space-y-2 block">
+				<label class="block space-y-2">
 					<span class="text-sm text-slate-300">Monitored chains</span>
-					<textarea bind:value={monitoredChainsText} rows="4" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white"></textarea>
+					<textarea bind:value={monitoredChainsText} rows="4" class="guardian-textarea"></textarea>
 				</label>
-				<label class="space-y-2 block">
+				<label class="block space-y-2">
 					<span class="text-sm text-slate-300">Alert destinations</span>
-					<textarea bind:value={alertChannelsText} rows="6" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white"></textarea>
+					<textarea bind:value={alertChannelsText} rows="6" class="guardian-textarea"></textarea>
 				</label>
-				<label class="space-y-2 block">
+				<label class="block space-y-2">
 					<span class="text-sm text-slate-300">Trusted / allowlisted addresses</span>
-					<textarea bind:value={allowlistedAddressesText} rows="6" class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white"></textarea>
+					<textarea bind:value={allowlistedAddressesText} rows="6" class="guardian-textarea"></textarea>
 				</label>
 			</div>
 		</div>
 
-		<div class="flex flex-wrap items-center gap-3 rounded-3xl border border-cyan-400/20 bg-cyan-400/10 p-5">
-			<button on:click={saveSettings} disabled={saving || !existing} class="rounded-full bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60">
-				{saving ? 'Saving to live canister…' : 'Save settings'}
-			</button>
-			<a href="/dashboard" class="rounded-full border border-white/15 px-5 py-3 text-sm text-slate-200 transition hover:bg-white/10">Back to dashboard</a>
-			<div class="text-sm text-cyan-50">Writes to live <code>guardian_config.set_config()</code> and returns you to your dashboard.</div>
+		<div class="guardian-card border-cyan-400/20 bg-cyan-400/10">
+			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+				<div class="text-sm leading-6 text-cyan-50">Writes to live <code>guardian_config.set_config()</code>, then reads back your saved state before returning you to the dashboard.</div>
+				<div class="flex flex-col gap-3 sm:flex-row">
+					<button on:click={saveSettings} disabled={saving || !existing} class="guardian-button-primary min-h-12 disabled:opacity-60">
+						{saving ? 'Saving to live canister…' : 'Save settings'}
+					</button>
+					<a href="/dashboard" class="guardian-button-secondary min-h-12">Back to dashboard</a>
+				</div>
+			</div>
 		</div>
 
 		{#if error}

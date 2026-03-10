@@ -53,94 +53,115 @@
 	onMount(loadDashboard);
 </script>
 
-<div class="space-y-8">
-	<div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+<div class="space-y-6 sm:space-y-8">
+	<div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 		<div>
-			<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Dashboard</div>
-			<h1 class="text-4xl font-semibold text-white">Your Guardian protection state</h1>
-			<p class="mt-2 max-w-2xl text-slate-300">Real saved state from the live config canister, tied to your connected Internet Identity principal.</p>
+			<div class="guardian-kicker">Dashboard</div>
+			<h1 class="guardian-section-title">Your Guardian protection state</h1>
+			<p class="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">A cleaner personal view of what’s active right now, when it was updated, and which settings are shaping your alerts.</p>
 		</div>
-		<div class="flex flex-wrap gap-3">
-			<a href="/settings" class="inline-flex rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-				Edit settings
-			</a>
-			<a href="/onboarding?mode=edit" class="inline-flex rounded-full border border-white/15 px-5 py-3 text-sm text-slate-200 transition hover:bg-white/10">
-				Re-run onboarding
-			</a>
+		<div class="flex flex-col gap-3 sm:flex-row">
+			<a href="/settings" class="guardian-button-primary min-h-12">Edit settings</a>
+			<a href="/alerts" class="guardian-button-secondary min-h-12">View alerts</a>
+			<a href="/onboarding?mode=edit" class="guardian-button-secondary min-h-12">Re-run onboarding</a>
 		</div>
 	</div>
 
 	{#if loading}
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-slate-300">Loading your live Guardian config…</div>
+		<div class="guardian-card text-slate-300">Loading your live Guardian config…</div>
 	{:else if error}
 		<div class="rounded-3xl border border-rose-400/30 bg-rose-400/10 p-6 text-rose-100">{error}</div>
 	{:else if view}
-		<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-			<div class="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-6">
-				<div class="text-sm text-emerald-200">Guardian status</div>
+		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			<div class="rounded-[1.75rem] border border-emerald-400/20 bg-emerald-400/10 p-5 sm:p-6">
+				<div class="text-sm text-emerald-200">Protection status</div>
 				<div class="mt-2 text-2xl font-semibold text-white">Guardian active</div>
-				<div class="mt-2 text-sm text-emerald-100">Monitoring preferences saved on-chain.</div>
+				<div class="mt-2 text-sm text-emerald-100">Monitoring preferences are saved on-chain and linked to your identity.</div>
 			</div>
-			<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="guardian-card">
 				<div class="text-sm text-slate-400">Active preset</div>
 				<div class="mt-2 text-2xl font-semibold text-white">{view.preset ? view.preset[0].toUpperCase() + view.preset.slice(1) : 'Custom'}</div>
+				<div class="mt-2 text-sm text-slate-400">Switch presets or fine-tune thresholds from settings.</div>
 			</div>
-			<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="guardian-card">
 				<div class="text-sm text-slate-400">Owner principal</div>
 				<div class="mt-2 text-2xl font-semibold text-white">{shortenPrincipal(view.owner)}</div>
-				<div class="mt-2 break-all font-mono text-xs text-slate-500">{shortenPrincipal(view.owner, 12, 8)}</div>
+				<div class="mt-2 break-all font-mono text-xs text-slate-500">{view.owner}</div>
 			</div>
-			<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+			<div class="guardian-card">
 				<div class="text-sm text-slate-400">Last updated</div>
-				<div class="mt-2 text-2xl font-semibold text-white">{formatDate(view.lastUpdated)}</div>
+				<div class="mt-2 text-xl font-semibold leading-snug text-white">{formatDate(view.lastUpdated)}</div>
+				<div class="mt-2 text-sm text-slate-400">This reflects the latest successful read from the live config canister.</div>
 			</div>
 		</div>
 
-		<div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-			<div class="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
-				<h2 class="text-xl font-semibold text-white">Protection summary</h2>
-				<div class="mt-5 grid gap-4 md:grid-cols-2">
-					<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+		<div class="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+			<div class="guardian-card">
+				<h2 class="text-2xl font-semibold text-white">Protection summary</h2>
+				<div class="mt-5 grid gap-4 sm:grid-cols-2">
+					<div class="guardian-stat">
 						<div class="text-sm text-slate-400">Large transfer trigger</div>
 						<div class="mt-2 text-xl font-semibold text-white">{formatPercent(view.largeTransferPct)}</div>
 					</div>
-					<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+					<div class="guardian-stat">
 						<div class="text-sm text-slate-400">Rapid tx rule</div>
 						<div class="mt-2 text-xl font-semibold text-white">{view.rapidTxCount} tx in {formatRapidWindow(view.rapidTxWindowSecs)}</div>
 					</div>
-					<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+					<div class="guardian-stat">
 						<div class="text-sm text-slate-400">New-address alerts</div>
 						<div class="mt-2 text-xl font-semibold text-white">{view.newAddressAlert ? 'On' : 'Off'}</div>
 					</div>
-					<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+					<div class="guardian-stat">
 						<div class="text-sm text-slate-400">Monitored chains</div>
-						<div class="mt-2 text-xl font-semibold text-white">{view.monitoredChains.join(', ')}</div>
+						<div class="mt-2 text-xl font-semibold text-white break-words">{view.monitoredChains.join(', ')}</div>
 					</div>
 				</div>
 
-				<div class="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-					<div class="text-sm text-slate-400">Configured alert destinations</div>
+				<div class="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 sm:p-5">
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<div class="text-sm text-slate-400">Configured alert destinations</div>
+							<p class="mt-1 text-sm text-slate-500">Destinations stay masked in the dashboard for privacy.</p>
+						</div>
+						<a href="/settings" class="text-sm text-cyan-200 underline decoration-cyan-300/30 underline-offset-4">Manage in settings</a>
+					</div>
 					{#if view.alertChannels.length > 0}
-						<div class="mt-3 space-y-2 text-sm text-slate-200">
+						<div class="mt-4 grid gap-2">
 							{#each view.alertChannels as channel}
-								<div class="rounded-xl border border-white/10 bg-slate-950/40 px-3 py-2 font-mono">{maskSavedChannel(channel)}</div>
+								<div class="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 font-mono text-xs text-slate-200 sm:text-sm">{maskSavedChannel(channel)}</div>
 							{/each}
 						</div>
-						<p class="mt-3 text-xs text-amber-200">Destinations are masked in the UI. Future privacy work: store destination secrets encrypted before any vetKeys-backed rollout.</p>
+						<p class="mt-3 text-xs leading-5 text-amber-200">Privacy hardening remains in place. Future follow-up: move destination secrets toward encrypted handling before any stronger privacy rollout.</p>
 					{:else}
-						<p class="mt-3 text-sm text-slate-400">No alert destination configured yet.</p>
+						<div class="mt-4 rounded-2xl border border-dashed border-white/10 bg-slate-950/30 px-4 py-5 text-sm text-slate-400">No alert destination configured yet. Add one from settings when you’re ready to receive notifications.</div>
 					{/if}
 				</div>
 			</div>
 
-			<div class="rounded-[1.75rem] border border-cyan-400/20 bg-cyan-400/10 p-6">
-				<h2 class="text-xl font-semibold text-white">What is live right now</h2>
-				<ul class="mt-4 space-y-3 text-sm text-cyan-50">
-					<li>• Internet Identity auth session is being used for this principal</li>
-					<li>• <code>guardian_config.get_config()</code> loaded your saved state</li>
-					<li>• Onboarding saves through <code>set_config()</code> and reads back after write</li>
-					<li>• Guardian remains advisory only — no automatic fund movement</li>
-				</ul>
+			<div class="space-y-4">
+				<div class="guardian-card border-cyan-400/20 bg-cyan-400/10">
+					<h2 class="text-2xl font-semibold text-white">What is live right now</h2>
+					<ul class="mt-4 space-y-3 text-sm leading-6 text-cyan-50">
+						<li>• Internet Identity auth is providing the current caller principal.</li>
+						<li>• <code>guardian_config.get_config()</code> loaded your saved state.</li>
+						<li>• Settings and onboarding both save through <code>set_config()</code> and read back after write.</li>
+						<li>• Guardian remains advisory only — there is no automatic fund movement.</li>
+					</ul>
+				</div>
+
+				<div class="guardian-card">
+					<h2 class="text-2xl font-semibold text-white">Quick next steps</h2>
+					<div class="mt-4 grid gap-3">
+						<a href="/alerts" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-200 transition hover:bg-white/10">
+							<div class="font-medium text-white">Review your alert history</div>
+							<div class="mt-1 text-slate-400">See caller-scoped alerts with severity, rules, and recommended action.</div>
+						</a>
+						<a href="/settings" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-200 transition hover:bg-white/10">
+							<div class="font-medium text-white">Tune thresholds and destinations</div>
+							<div class="mt-1 text-slate-400">Adjust sensitivity, monitored chains, and trusted addresses without restarting setup.</div>
+						</a>
+					</div>
+				</div>
 			</div>
 		</div>
 	{/if}

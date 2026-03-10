@@ -36,58 +36,66 @@
 	});
 </script>
 
-<div class="space-y-6">
-	<div class="space-y-2">
-		<div class="text-sm uppercase tracking-[0.25em] text-cyan-200">Alerts</div>
-		<h1 class="text-4xl font-semibold text-white">Your Guardian alert history</h1>
-		<p class="max-w-3xl text-slate-300">
+<div class="space-y-6 sm:space-y-8">
+	<div class="space-y-3">
+		<div class="guardian-kicker">Alerts</div>
+		<h1 class="guardian-section-title">Your Guardian alert history</h1>
+		<p class="max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
 			These alerts belong only to your connected Internet Identity
 			{#if $authState.principal}
 				<span class="font-mono text-slate-200">{$authState.principal}</span>
 			{/if}.
-			Guardian shows only your own alert history here.
+			Guardian shows only your own caller-scoped alert history here.
 		</p>
 	</div>
 
 	{#if loading}
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6 text-slate-300">Loading your alert history…</div>
+		<div class="guardian-card text-slate-300">Loading your alert history…</div>
 	{:else if error}
 		<div class="rounded-3xl border border-rose-400/30 bg-rose-400/10 p-6 text-rose-100">{error}</div>
 	{:else if alerts.length === 0}
-		<div class="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
-			<h2 class="text-xl font-semibold text-white">No alerts yet</h2>
-			<p class="mt-3 max-w-2xl text-sm text-slate-300">
-				You’re all clear for now. When Guardian detects suspicious activity for your connected identity, your personal alert history will appear here.
-			</p>
+		<div class="grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+			<div class="guardian-card">
+				<h2 class="text-2xl font-semibold text-white">No alerts yet</h2>
+				<p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300">You’re all clear for now. When Guardian detects suspicious activity for your connected identity, your personal alert history will appear here with severity, triggered rules, and recommended action.</p>
+			</div>
+			<div class="guardian-card border-cyan-400/20 bg-cyan-400/10">
+				<h2 class="text-2xl font-semibold text-white">While you wait</h2>
+				<ul class="mt-4 space-y-3 text-sm leading-6 text-cyan-50">
+					<li>• Review your preset and thresholds on the settings page.</li>
+					<li>• Add a notification destination if you want alerts routed somewhere visible.</li>
+					<li>• Keep your wallet flows normal — Guardian is looking for behavior that feels unusual relative to your setup.</li>
+				</ul>
+			</div>
 		</div>
 	{:else}
 		<div class="grid gap-4">
 			{#each alerts as alert}
-				<article class="rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6">
+				<article class="guardian-card">
 					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 						<div>
 							<div class={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${severityClasses(alert.severity)}`}>
 								{alert.severity}
 							</div>
-							<div class="mt-3 text-lg font-semibold text-white">{alert.events_summary}</div>
+							<div class="mt-3 text-lg font-semibold leading-7 text-white sm:text-xl">{alert.events_summary}</div>
 							<div class="mt-2 text-sm text-slate-400">Detected {formatTimestamp(alert.timestamp)}</div>
 						</div>
-						<div class="text-sm text-slate-400">Score {alert.severity_score}</div>
+						<div class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">Score {alert.severity_score}</div>
 					</div>
 
-					<div class="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
-						<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+					<div class="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
+						<div class="rounded-[1.4rem] border border-white/10 bg-white/5 p-4 sm:p-5">
 							<div class="text-sm text-slate-400">Rules triggered</div>
-							<ul class="mt-3 space-y-2 text-sm text-slate-200">
+							<ul class="mt-3 space-y-2 text-sm leading-6 text-slate-200">
 								{#each alert.rules_triggered as rule}
-									<li>• {rule}</li>
+									<li class="flex gap-3"><span class="text-cyan-200">•</span><span>{rule}</span></li>
 								{/each}
 							</ul>
 						</div>
 
-						<div class="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+						<div class="rounded-[1.4rem] border border-cyan-400/20 bg-cyan-400/10 p-4 sm:p-5">
 							<div class="text-sm text-cyan-100">Recommended action</div>
-							<p class="mt-3 text-sm text-cyan-50">{alert.recommended_action}</p>
+							<p class="mt-3 text-sm leading-6 text-cyan-50">{alert.recommended_action}</p>
 						</div>
 					</div>
 				</article>

@@ -2,8 +2,8 @@
   "guardian-dev": {
     "status": "idle",
     "current_task": null,
-    "last_updated": "2026-03-10T17:07:23Z",
-    "note": "Completed safe alert history sprint: guardian_engine now exposes caller-scoped get_my_alerts(limit), and /alerts renders only connected-user alert history with no mock fallback."
+    "last_updated": "2026-03-10T21:36:12Z",
+    "note": "Completed Guardian UI polish sprint: modernized consumer shell and key routes for mobile, improved empty/loading states, preserved privacy hardening, and verified frontend npm run check/build."
   },
   "dream-cycle": {
     "status": "idle",

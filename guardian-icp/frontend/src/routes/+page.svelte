@@ -35,74 +35,124 @@
 			checking = false;
 		}
 	}
+
+	const trustPoints = [
+		'Non-custodial. Guardian never holds funds or asks for seed phrases.',
+		'Your settings are tied to your connected principal and saved on-chain.',
+		'You choose the alert sensitivity level and can change it later.',
+		'Guardian alerts and explains risk signals — it does not move funds for you.'
+	];
+
+	const steps = [
+		{
+			label: 'Connect',
+			title: 'Internet Identity first',
+			body: 'Connect once, restore your session on return, and keep your Guardian settings linked to your principal.'
+		},
+		{
+			label: 'Choose',
+			title: 'Pick a protection preset',
+			body: 'Start with Safe, Balanced, or Aggressive. Balanced stays the recommended default for most wallets.'
+		},
+		{
+			label: 'Review',
+			title: 'Confirm before saving live',
+			body: 'See the exact protection behavior in plain language before anything is written to the live guardian_config canister.'
+		}
+	];
 </script>
 
-<div class="space-y-8">
-	<section class="grid gap-8 rounded-[2rem] border border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.14),_transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.98))] p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-12">
-		<div class="space-y-6">
-			<div class="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-xs uppercase tracking-[0.25em] text-cyan-200">
-				Phase 5 · Sprint 1
-			</div>
-			<div class="space-y-4">
-				<h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-white lg:text-6xl">
-					Protect your ICP wallet from suspicious activity
-				</h1>
-				<p class="max-w-2xl text-lg text-slate-300">
-					A safety layer that watches your wallet activity and alerts you when something looks off.
-				</p>
-			</div>
-
-			<div class="flex flex-wrap gap-3">
-				<button
-					on:click={connectAndContinue}
-					disabled={$authState.connecting || checking}
-					class="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-60"
-				>
-					{$authState.connecting || checking ? 'Checking account…' : 'Connect with Internet Identity'}
-				</button>
-				<a href="#how-it-works" class="rounded-full border border-white/15 px-6 py-3 text-sm text-slate-200 transition hover:bg-white/10">
-					How it works
-				</a>
-			</div>
-
-			{#if routeError}
-				<div class="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-					{routeError}
+<div class="space-y-6 sm:space-y-8">
+	<section class="overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-6 shadow-[0_24px_80px_rgba(2,6,23,0.38)] sm:p-8 lg:p-10">
+		<div class="grid gap-8 xl:grid-cols-[1.15fr_0.85fr] xl:items-center">
+			<div class="space-y-6">
+				<div class="guardian-badge border-cyan-300/20 bg-cyan-400/10 text-cyan-100">2026 consumer protection flow</div>
+				<div class="space-y-4">
+					<h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+						Guardian helps you catch risky wallet behavior earlier.
+					</h1>
+					<p class="max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+						A calmer, consumer-friendly safety layer for ICP wallets — designed to feel trustworthy, understandable, and usable on mobile from the first tap.
+					</p>
 				</div>
-			{/if}
-		</div>
 
-		<div class="rounded-[1.75rem] border border-white/10 bg-white/5 p-6">
-			<div class="space-y-4">
-				<div class="text-sm font-semibold uppercase tracking-[0.25em] text-slate-400">Trust</div>
-				<ul class="space-y-3 text-sm text-slate-200">
-					<li>• Non-custodial — Guardian never holds your funds</li>
-					<li>• No seed phrase required</li>
-					<li>• Settings stored on live Internet Computer canisters</li>
-					<li>• Advisory alerts, not automatic fund movement</li>
-				</ul>
-				<div class="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-100">
-					If a large transfer suddenly moves 60% of your balance to a new address, Guardian can flag it and alert you.
+				<div class="flex flex-col gap-3 sm:flex-row">
+					<button on:click={connectAndContinue} disabled={$authState.connecting || checking} class="guardian-button-primary min-h-12 disabled:opacity-60">
+						{$authState.connecting || checking ? 'Checking your account…' : 'Connect with Internet Identity'}
+					</button>
+					<a href="#how-it-works" class="guardian-button-secondary min-h-12">How it works</a>
+				</div>
+
+				<div class="grid gap-3 sm:grid-cols-3">
+					<div class="guardian-stat">
+						<div class="text-sm text-slate-400">Setup feel</div>
+						<div class="mt-2 text-xl font-semibold text-white">Under 2 minutes</div>
+					</div>
+					<div class="guardian-stat">
+						<div class="text-sm text-slate-400">Storage path</div>
+						<div class="mt-2 text-xl font-semibold text-white">Live IC canisters</div>
+					</div>
+					<div class="guardian-stat">
+						<div class="text-sm text-slate-400">Wallet model</div>
+						<div class="mt-2 text-xl font-semibold text-white">Non-custodial</div>
+					</div>
+				</div>
+
+				{#if routeError}
+					<div class="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+						{routeError}
+					</div>
+				{/if}
+			</div>
+
+			<div class="guardian-glass-strong rounded-[1.75rem] p-5 sm:p-6">
+				<div class="space-y-5">
+					<div>
+						<div class="guardian-kicker">Trust at a glance</div>
+						<h2 class="mt-3 text-2xl font-semibold text-white">Built to explain what Guardian does — and what it doesn’t.</h2>
+					</div>
+
+					<ul class="space-y-3 text-sm leading-6 text-slate-200">
+						{#each trustPoints as point}
+							<li class="flex gap-3">
+								<span class="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">✓</span>
+								<span>{point}</span>
+							</li>
+						{/each}
+					</ul>
+
+					<div class="rounded-[1.5rem] border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm leading-6 text-cyan-50">
+						If a sudden transfer sends a large share of your balance to a new address, Guardian can surface that behavior, explain why it was flagged, and route an alert to your configured destinations.
+					</div>
 				</div>
 			</div>
 		</div>
 	</section>
 
-	<section id="how-it-works" class="grid gap-4 md:grid-cols-3">
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">1 · Connect</div>
-			<h2 class="mb-2 text-xl font-semibold text-white">Internet Identity first</h2>
-			<p class="text-sm text-slate-300">Connect with Internet Identity so Guardian can save protection settings under your principal.</p>
+	<section id="how-it-works" class="grid gap-4 lg:grid-cols-3">
+		{#each steps as step}
+			<div class="guardian-card">
+				<div class="guardian-kicker">{step.label}</div>
+				<h2 class="mt-3 text-2xl font-semibold text-white">{step.title}</h2>
+				<p class="mt-3 text-sm leading-6 text-slate-300">{step.body}</p>
+			</div>
+		{/each}
+	</section>
+
+	<section class="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+		<div class="guardian-card">
+			<div class="guardian-kicker">Why people start here</div>
+			<h2 class="mt-3 text-2xl font-semibold text-white">Opinionated defaults first, advanced controls later.</h2>
+			<p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+				Guardian avoids dumping raw config fields on first-time users. Start with a preset, review the effect in plain language, then fine-tune settings once your protection is already live.
+			</p>
 		</div>
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">2 · Choose</div>
-			<h2 class="mb-2 text-xl font-semibold text-white">Safe, Balanced, or Aggressive</h2>
-			<p class="text-sm text-slate-300">Start with a preset now, then fine-tune later once the broader settings UI lands.</p>
-		</div>
-		<div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-			<div class="mb-3 text-sm uppercase tracking-[0.25em] text-cyan-200">3 · Save live</div>
-			<h2 class="mb-2 text-xl font-semibold text-white">Stored on-chain</h2>
-			<p class="text-sm text-slate-300">Guardian writes your configuration to the live <code class="text-cyan-200">guardian_config</code> canister, then reads it back before showing your dashboard.</p>
+		<div class="guardian-card border-emerald-400/20 bg-emerald-400/10">
+			<div class="guardian-kicker text-emerald-200">Live deployment posture</div>
+			<h2 class="mt-3 text-2xl font-semibold text-white">No fake “protected” state.</h2>
+			<p class="mt-3 text-sm leading-6 text-emerald-50">
+				Guardian’s consumer routes are wired for the live deployment path. Private views fail closed instead of pretending broad mock data is yours.
+			</p>
 		</div>
 	</section>
 </div>
