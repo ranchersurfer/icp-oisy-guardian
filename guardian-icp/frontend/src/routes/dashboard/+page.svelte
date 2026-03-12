@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authState } from '$lib/auth';
-	import { getMyConfig } from '$lib/canister';
+	import { getEmailVerificationStatus, getMyConfig } from '$lib/canister';
 	import {
 		formatPercent,
 		formatRapidWindow,
@@ -10,15 +9,20 @@
 		shortenPrincipal
 	} from '$lib/guardian';
 	import { maskEmail, maskUrl } from '$lib/utils';
-	import type { GuardianConfigView } from '$lib/types';
+	import type { EmailVerificationStatus, GuardianConfigView } from '$lib/types';
 
 	let loading = true;
 	let error = '';
 	let view: GuardianConfigView | null = null;
+	let emailStatus: EmailVerificationStatus | null = null;
 
 	function formatDate(value: bigint): string {
 		const millis = Number(value / BigInt(1_000_000));
 		return new Date(millis).toLocaleString();
+	}
+
+	function optText(value: [] | [string] | undefined): string {
+		return value?.[0] ?? '';
 	}
 
 	function maskSavedChannel(raw: string): string {
@@ -37,12 +41,13 @@
 		loading = true;
 		error = '';
 		try {
-			const result = await getMyConfig();
-			view = mapConfigResultToView(result);
+			const [configResult, emailResult] = await Promise.all([getMyConfig(), getEmailVerificationStatus()]);
+			view = mapConfigResultToView(configResult);
 			if (!view) {
 				await goto('/onboarding');
 				return;
 			}
+			if ('Ok' in emailResult) emailStatus = emailResult.Ok;
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Failed to load Guardian dashboard.';
 		} finally {
@@ -50,7 +55,7 @@
 		}
 	}
 
-	onMount(loadDashboard);
+	loadDashboard();
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -99,22 +104,10 @@
 			<div class="guardian-card">
 				<h2 class="text-2xl font-semibold text-white">Protection summary</h2>
 				<div class="mt-5 grid gap-4 sm:grid-cols-2">
-					<div class="guardian-stat">
-						<div class="text-sm text-slate-400">Large transfer trigger</div>
-						<div class="mt-2 text-xl font-semibold text-white">{formatPercent(view.largeTransferPct)}</div>
-					</div>
-					<div class="guardian-stat">
-						<div class="text-sm text-slate-400">Rapid tx rule</div>
-						<div class="mt-2 text-xl font-semibold text-white">{view.rapidTxCount} tx in {formatRapidWindow(view.rapidTxWindowSecs)}</div>
-					</div>
-					<div class="guardian-stat">
-						<div class="text-sm text-slate-400">New-address alerts</div>
-						<div class="mt-2 text-xl font-semibold text-white">{view.newAddressAlert ? 'On' : 'Off'}</div>
-					</div>
-					<div class="guardian-stat">
-						<div class="text-sm text-slate-400">Monitored chains</div>
-						<div class="mt-2 text-xl font-semibold text-white break-words">{view.monitoredChains.join(', ')}</div>
-					</div>
+					<div class="guardian-stat"><div class="text-sm text-slate-400">Large transfer trigger</div><div class="mt-2 text-xl font-semibold text-white">{formatPercent(view.largeTransferPct)}</div></div>
+					<div class="guardian-stat"><div class="text-sm text-slate-400">Rapid tx rule</div><div class="mt-2 text-xl font-semibold text-white">{view.rapidTxCount} tx in {formatRapidWindow(view.rapidTxWindowSecs)}</div></div>
+					<div class="guardian-stat"><div class="text-sm text-slate-400">New-address alerts</div><div class="mt-2 text-xl font-semibold text-white">{view.newAddressAlert ? 'On' : 'Off'}</div></div>
+					<div class="guardian-stat"><div class="text-sm text-slate-400">Monitored chains</div><div class="mt-2 text-xl font-semibold text-white break-words">{view.monitoredChains.join(', ')}</div></div>
 				</div>
 
 				<div class="mt-6 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 sm:p-5">
@@ -131,7 +124,6 @@
 								<div class="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 font-mono text-xs text-slate-200 sm:text-sm">{maskSavedChannel(channel)}</div>
 							{/each}
 						</div>
-						<p class="mt-3 text-xs leading-5 text-amber-200">Privacy hardening remains in place. Future follow-up: move destination secrets toward encrypted handling before any stronger privacy rollout.</p>
 					{:else}
 						<div class="mt-4 rounded-2xl border border-dashed border-white/10 bg-slate-950/30 px-4 py-5 text-sm text-slate-400">No alert destination configured yet. Add one from settings when you’re ready to receive notifications.</div>
 					{/if}
@@ -140,27 +132,23 @@
 
 			<div class="space-y-4">
 				<div class="guardian-card border-cyan-400/20 bg-cyan-400/10">
-					<h2 class="text-2xl font-semibold text-white">What is live right now</h2>
+					<h2 class="text-2xl font-semibold text-white">Verified email state</h2>
 					<ul class="mt-4 space-y-3 text-sm leading-6 text-cyan-50">
-						<li>• Internet Identity auth is providing the current caller principal.</li>
-						<li>• <code>guardian_config.get_config()</code> loaded your saved state.</li>
-						<li>• Settings and onboarding both save through <code>set_config()</code> and read back after write.</li>
-						<li>• Guardian remains advisory only — there is no automatic fund movement.</li>
+						<li>• Verified email: {optText(emailStatus?.verified_email_masked) || 'None'}</li>
+						<li>• Pending email: {optText(emailStatus?.pending_email_masked) || 'None'}</li>
+						<li>• Delivery gate: {emailStatus?.delivery_active ? 'Only verified email is eligible for active delivery.' : 'No verified email delivery is active.'}</li>
+						<li>• Raw destination values remain masked in the UI for privacy.</li>
 					</ul>
 				</div>
 
 				<div class="guardian-card">
-					<h2 class="text-2xl font-semibold text-white">Quick next steps</h2>
-					<div class="mt-4 grid gap-3">
-						<a href="/alerts" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-200 transition hover:bg-white/10">
-							<div class="font-medium text-white">Review your alert history</div>
-							<div class="mt-1 text-slate-400">See caller-scoped alerts with severity, rules, and recommended action.</div>
-						</a>
-						<a href="/settings" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-200 transition hover:bg-white/10">
-							<div class="font-medium text-white">Tune thresholds and destinations</div>
-							<div class="mt-1 text-slate-400">Adjust sensitivity, monitored chains, and trusted addresses without restarting setup.</div>
-						</a>
-					</div>
+					<h2 class="text-2xl font-semibold text-white">What is live right now</h2>
+					<ul class="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+						<li>• Internet Identity auth is providing the current caller principal.</li>
+						<li>• <code>guardian_config.get_config()</code> loaded your saved state.</li>
+						<li>• Settings saves sanitize raw email entries so unverified email never appears as an active channel.</li>
+						<li>• Guardian remains advisory only — there is no automatic fund movement.</li>
+					</ul>
 				</div>
 			</div>
 		</div>

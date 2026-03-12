@@ -224,5 +224,17 @@
     "created_at": "2026-03-10T21:36:12Z",
     "updated_at": "2026-03-10T21:36:12Z",
     "completed_at": "2026-03-10T21:36:12Z"
+  },
+  {
+    "id": "task-20",
+    "title": "Guardian Phase 5 \u2014 Verified email alerts gate",
+    "description": "Added caller-scoped verified-email state in guardian_config, masked verified/pending email UX in /settings and /dashboard, sanitized config saves so raw/unverified email is excluded from active delivery, and tightened engine email parsing to require verified=true before an email channel is considered deliverable. Current smoke path is demo-only code confirmation until a real outbound verification sender is wired.",
+    "status": "done",
+    "assignee": "guardian-dev",
+    "priority": "high",
+    "project_id": "proj-guardian",
+    "created_at": "2026-03-12T20:44:00Z",
+    "updated_at": "2026-03-12T21:58:00Z",
+    "completed_at": "2026-03-12T21:58:00Z"
   }
 ]

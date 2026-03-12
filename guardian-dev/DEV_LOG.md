@@ -1,5 +1,50 @@
 # Guardian-Dev Log
 
+## Phase 5: Verified Email Alerts Gate — 2026-03-12
+
+### Session: guardian-email-alerts-finish (Subagent)
+**Time**: 2026-03-12 13:44 PDT  
+**Status**: ✅ COMPLETE / BUILD-VERIFIED  
+**Guardian-Dev Status**: idle
+
+### What Landed
+- Added caller-scoped verified-email state to `guardian_config` with:
+  - `begin_email_verification(email)`
+  - `confirm_email_verification(code)`
+  - `clear_verified_email()`
+  - `get_email_verification_status()`
+- Preserved privacy hardening by returning only masked pending/verified email values to the consumer UI.
+- Updated `set_config()` / `get_config()` sanitization so raw `email;...` values are stripped unless the email is already verified.
+- Tightened `guardian_engine` email channel parsing so email channels are ignored unless `verified=true` is present.
+- Reworked consumer `/settings` to manage email separately from the raw destination textarea and added a masked verification state card.
+- Updated `/dashboard` to show the masked verified/pending email state and explicitly communicate whether email delivery is active.
+
+### Important Behavior Notes
+- **Unverified email is not treated as active delivery.**
+- **Email remains masked in the UI.**
+- The current verification loop is a **demo/smoke path**: the backend issues a 6-digit challenge and the frontend shows it locally so the gate can be tested without wiring a real outbound verification sender yet.
+- Existing backend email delivery still requires configured transport details (`api_url`, `api_key`) before real outbound email delivery can occur.
+
+### Verification
+- `cargo test -p guardian_config` ✅
+- `cargo test -p guardian_engine` ✅ (277 passing)
+- `npm run check` ✅
+- `npm run build` ✅
+
+### Files Changed
+- `guardian-icp/src/guardian_config/src/lib.rs`
+- `guardian-icp/src/guardian_engine/src/delivery.rs`
+- `guardian-icp/frontend/src/lib/canister.ts`
+- `guardian-icp/frontend/src/lib/idl/guardian_config.idl.ts`
+- `guardian-icp/frontend/src/lib/types.ts`
+- `guardian-icp/frontend/src/routes/settings/+page.svelte`
+- `guardian-icp/frontend/src/routes/dashboard/+page.svelte`
+- `/home/ranch/.openclaw/workspace/agent-status.json`
+- `/home/ranch/.openclaw/workspace/tasks.json`
+- `/home/ranch/.openclaw/workspace/projects.json`
+- `/home/ranch/.openclaw/workspace/guardian-dev/DEV_LOG.md`
+- `guardian-icp/README.md`
+
 ## Phase 5: Consumer UI polish + mobile-friendly UX — 2026-03-10
 
 ### Session: guardian-ui-polish-sprint (Subagent)

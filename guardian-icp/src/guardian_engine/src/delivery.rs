@@ -106,6 +106,10 @@ impl AlertChannel {
                 Some(AlertChannel::Webhook { url, secret })
             }
             "email" => {
+                let verified = kv.get("verified").map(|value| value.eq_ignore_ascii_case("true")).unwrap_or(false);
+                if !verified {
+                    return None;
+                }
                 let address = kv.get("address")?.to_string();
                 let api_url = kv.get("api_url")?.to_string();
                 let api_key = kv.get("api_key")?.to_string();
@@ -724,7 +728,7 @@ mod tests {
     #[test]
     fn test_parse_email_channel() {
         let ch = AlertChannel::from_str_config(
-            "email;address=user@example.com;api_url=https://api.mailgun.net/v3/mg.example.com/messages;api_key=key-abc123"
+            "email;address=user@example.com;verified=true;api_url=https://api.mailgun.net/v3/mg.example.com/messages;api_key=key-abc123"
         ).unwrap();
         assert_eq!(
             ch,
@@ -734,6 +738,13 @@ mod tests {
                 api_key: "key-abc123".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn test_parse_unverified_email_channel_returns_none() {
+        assert!(AlertChannel::from_str_config(
+            "email;address=user@example.com;api_url=https://api.mailgun.net/v3/mg.example.com/messages;api_key=key-abc123"
+        ).is_none());
     }
 
     #[test]

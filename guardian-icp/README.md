@@ -166,6 +166,12 @@ service guardian_config : {
   // Retrieve caller's configuration
   get_config : () -> (ApiResult) query;
 
+  // Start / confirm / inspect verified-email state
+  begin_email_verification : (text) -> (ApiResult) ;
+  confirm_email_verification : (text) -> (ApiResult) ;
+  clear_verified_email : () -> (ApiResult) ;
+  get_email_verification_status : () -> (ApiResult) query;
+
   // Cycle balance and health status
   health : () -> (ApiResult) query;
 
@@ -173,6 +179,16 @@ service guardian_config : {
   get_stats : () -> (ApiResult) query;
 }
 ```
+
+### Verified email delivery behavior
+
+- Email is now managed separately from the raw destination list in the consumer UI.
+- Pending and verified email values stay **masked** in the user-facing UI.
+- `set_config()` sanitizes raw `email;...` destination strings, so **unverified email is never treated as active delivery**.
+- The engine only considers email descriptors eligible when `verified=true` is present.
+- Current smoke-testing path: the canister generates a 6-digit verification challenge and the frontend shows it locally in demo mode so the verification gate can be validated without a real outbound verification sender.
+- Real outbound email delivery still requires backend mail transport details (`api_url`, `api_key`) before alerts can actually be sent by email.
+
 
 ### guardian_engine
 
@@ -184,11 +200,11 @@ service guardian_engine : {
   // Link to config canister (controller only)
   set_config_canister_id : (principal) -> ();
 
-  // Get alerts for caller
-  get_my_alerts : () -> (vec AlertRecord) query;
+  // Get caller-scoped alert history (safe consumer fields only)
+  get_my_alerts : (nat64) -> (vec ConsumerAlertRecord) query;
 
   // Get pending alerts count
-  get_alert_count : () -> (nat64) query;
+  get_alert_queue_len : () -> (nat64) query;
 }
 ```
 
@@ -501,25 +517,47 @@ Then: `dfx deploy guardian_frontend --network ic`
 
 ---
 
-## Deployment to IC Mainnet
+## Deployment to IC Mainnet / IC
 
-> ⚠️ Testnet deployment blocked pending identity funding. Local/testnet only.
+**Live IC canister IDs (2026-03-09):**
+- `guardian_config` → `higkb-faaaa-aaaau-ae5cq-cai`
+- `guardian_engine` → `dyqi7-riaaa-aaaau-afmla-cai`
+- `guardian_frontend` → `igg2b-kaaaa-aaaau-afnuq-cai`
+
+**Public frontend URL:**
+- `https://igg2b-kaaaa-aaaau-afnuq-cai.icp0.io`
+
+**Deployment status:**
+- `guardian_engine` created and installed on IC
+- `guardian_config` installed on IC after additional cycles top-ups and verified via `health`
+- Production deploy source of truth: `/home/ranch/.openclaw/workspace/guardian-icp`
 
 ```bash
+export PATH="$HOME/.local/share/dfx/bin:$HOME/.cargo/bin:$PATH"
+export DFX_WARNING=-mainnet_plaintext_identity
+cd /home/ranch/.openclaw/workspace/guardian-icp
+
+dfx identity use guardian_deployer_old
+
 # Frontend deployment:
 ./scripts/deploy-frontend-testnet.sh --network ic
 
-# Backend deployment (requires cycles):
-dfx cycles convert --amount 0.5 --network ic
-dfx deploy --network ic
+# Verify backend canisters:
+dfx canister id guardian_config --network ic
+dfx canister id guardian_engine --network ic
+dfx canister status guardian_config --network ic
+dfx canister status guardian_engine --network ic
 ```
 
-```bash
-# When ready:
-dfx deploy --network ic
-```
+Ensure the selected `dfx identity` has sufficient cycles and controller rights before reinstall/upgrade operations.
 
-Ensure `dfx identity` has sufficient cycles and the identity has controller rights.
+### Frontend deployment + real-origin II validation notes
+- Production frontend build was baked against the live IC backend canisters above.
+- `VITE_USE_MOCK=false` and `VITE_ENABLE_OPERATOR_ROUTES=false` were used for the IC build.
+- Public route checks succeeded for `/`, `/onboarding`, `/review`, and `/dashboard` from the deployed canister origin.
+- Internet Identity is now configured for real-origin testing through the deployed `icp0.io` origin and `https://identity.ic0.app`.
+- One manual step remains: a human browser session should click through the II popup/login flow and confirm end-to-end auth + config save from the public URL.
+- Deploy script note: `scripts/deploy-frontend-testnet.sh` now exports Vite env vars inline during build so the IC bundle picks up live canister IDs correctly.
 
 ---
 

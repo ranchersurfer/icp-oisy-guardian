@@ -2,8 +2,8 @@
   "guardian-dev": {
     "status": "idle",
     "current_task": null,
-    "last_updated": "2026-03-10T21:36:12Z",
-    "note": "Completed Guardian UI polish sprint: modernized consumer shell and key routes for mobile, improved empty/loading states, preserved privacy hardening, and verified frontend npm run check/build."
+    "last_updated": "2026-03-12T21:58:00Z",
+    "note": "Guardian verified-email alerts sprint landed: backend/frontend green, masked verified-email UX added, and unverified email is excluded from active delivery."
   },
   "dream-cycle": {
     "status": "idle",

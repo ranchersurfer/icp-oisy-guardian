@@ -75,8 +75,25 @@ export interface GuardianConfigRecord {
 	allowlisted_addresses: string[];
 }
 
+export interface EmailVerificationStatus {
+	pending_email_masked: [] | [string];
+	pending_requested_at: [] | [bigint];
+	verified_email_masked: [] | [string];
+	verified_at: [] | [bigint];
+	delivery_active: boolean;
+	code_expires_at: [] | [bigint];
+}
+
+export interface EmailVerificationChallenge {
+	status: EmailVerificationStatus;
+	verification_code: string;
+	demo_only: boolean;
+}
+
 export type GuardianConfigResult = { Ok: GuardianConfigRecord } | { Err: string };
 export type GuardianWriteResult = { Ok: null } | { Err: string };
+export type EmailVerificationStatusResult = { Ok: EmailVerificationStatus } | { Err: string };
+export type EmailVerificationChallengeResult = { Ok: EmailVerificationChallenge } | { Err: string };
 
 export type GuardianPresetId = 'safe' | 'balanced' | 'aggressive';
 

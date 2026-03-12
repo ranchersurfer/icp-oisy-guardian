@@ -6,6 +6,8 @@ import { createConfigActor, createEngineActor, CANISTER_IDS } from './auth.js';
 import type {
 	AlertRecord,
 	CanisterHealth,
+	EmailVerificationChallengeResult,
+	EmailVerificationStatusResult,
 	GuardianConfigRecord,
 	GuardianConfigResult,
 	GuardianWriteResult,
@@ -176,6 +178,26 @@ export async function getMyConfig(): Promise<GuardianConfigResult> {
 export async function saveConfig(config: GuardianConfigRecord): Promise<GuardianWriteResult> {
 	const actor = await createConfigActor();
 	return (await actor.set_config(config)) as GuardianWriteResult;
+}
+
+export async function getEmailVerificationStatus(): Promise<EmailVerificationStatusResult> {
+	const actor = await createConfigActor();
+	return (await actor.get_email_verification_status()) as EmailVerificationStatusResult;
+}
+
+export async function beginEmailVerification(email: string): Promise<EmailVerificationChallengeResult> {
+	const actor = await createConfigActor();
+	return (await actor.begin_email_verification(email)) as EmailVerificationChallengeResult;
+}
+
+export async function confirmEmailVerification(code: string): Promise<EmailVerificationStatusResult> {
+	const actor = await createConfigActor();
+	return (await actor.confirm_email_verification(code)) as EmailVerificationStatusResult;
+}
+
+export async function clearVerifiedEmail(): Promise<EmailVerificationStatusResult> {
+	const actor = await createConfigActor();
+	return (await actor.clear_verified_email()) as EmailVerificationStatusResult;
 }
 
 export function isLiveMode(): boolean {
